@@ -68,21 +68,65 @@ export const fetchCrypto = async (ticker) => {
   }
 }
 
-// Fetch macro data from BCB (Banco Central do Brasil)
+// Fetch macro data from BCB (Banco Central do Brasil) + brapi (índices) + CoinGecko (BTC)
 export const fetchMacro = async () => {
   const hit = fromCache('__macro__')
   if (hit) return hit
   try {
-    const [selicR, ipcaR, dolarR] = await Promise.allSettled([
+    const [selicR, ipcaR, dolarR, selicMetaR, cdiR, ibovR, spR, btcR] = await Promise.allSettled([
+      // Selic over (taxa efetiva diária acumulada mensal → % a.a.)
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.11/dados/ultimos/1?formato=json').then(r => r.json()),
+      // IPCA mensal — últimos 12 meses
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados/ultimos/12?formato=json').then(r => r.json()),
+      // PTAX BRL/USD
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/1?formato=json').then(r => r.json()),
+      // Selic Meta (decisão Copom — série 432)
+      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json').then(r => r.json()),
+      // CDI over diário (série 12)
+      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
+      // Ibovespa via brapi
+      fetch('https://brapi.dev/api/quote/%5EBVSP?range=5d&interval=1d').then(r => r.json()),
+      // S&P500 via brapi
+      fetch('https://brapi.dev/api/quote/%5EGSPC?range=5d&interval=1d').then(r => r.json()),
+      // BTC/BRL via CoinGecko
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true').then(r => r.json()),
     ])
+
     const selic = selicR.status === 'fulfilled' ? parseFloat(selicR.value?.[0]?.valor) : null
+    const selicMeta = selicMetaR.status === 'fulfilled' ? parseFloat(selicMetaR.value?.[0]?.valor) : null
+    const cdiDiario = cdiR.status === 'fulfilled' ? parseFloat(cdiR.value?.[0]?.valor) : null
+    // CDI anualizado: (1 + taxa_diaria/100)^252 - 1
+    const cdi = cdiDiario != null ? ((Math.pow(1 + cdiDiario / 100, 252) - 1) * 100) : null
+
     const ipcaArr = ipcaR.status === 'fulfilled' ? ipcaR.value : []
     const ipca12 = ipcaArr.reduce((s, i) => s + parseFloat(i.valor || 0), 0)
+
     const dolar = dolarR.status === 'fulfilled' ? parseFloat(dolarR.value?.[0]?.valor) : null
-    return cached('__macro__', { selic, ipca12, dolar, updatedAt: new Date().toISOString() })
+
+    const ibovQ = ibovR.status === 'fulfilled' ? ibovR.value?.results?.[0] : null
+    const ibov = ibovQ ? {
+      price: ibovQ.regularMarketPrice,
+      change_pct: ibovQ.regularMarketChangePercent,
+    } : null
+
+    const spQ = spR.status === 'fulfilled' ? spR.value?.results?.[0] : null
+    const sp500 = spQ ? {
+      price: spQ.regularMarketPrice,
+      change_pct: spQ.regularMarketChangePercent,
+    } : null
+
+    const btcData = btcR.status === 'fulfilled' ? btcR.value?.bitcoin : null
+    const btc = btcData ? {
+      price_brl: btcData.brl,
+      price_usd: btcData.usd,
+      change_pct: btcData.brl_24h_change,
+    } : null
+
+    return cached('__macro__', {
+      selic, selicMeta, cdi, ipca12, dolar,
+      ibov, sp500, btc,
+      updatedAt: new Date().toISOString(),
+    })
   } catch {
     return null
   }

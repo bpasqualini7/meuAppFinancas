@@ -1,6 +1,138 @@
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR } from '../lib/context'
 import { KPI, Card, MiniDonut, BalBar, AttrBadge, Spinner } from '../components/ui'
 
+// ── Macro Ticker Strip ────────────────────────────────────
+function MacroStrip({ macro }) {
+  if (!macro) return null
+
+  const fmtPct = (v) => v == null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`
+  const fmtPctPlain = (v) => v == null ? '—' : `${Number(v).toFixed(2)}%`
+
+  const indicators = [
+    {
+      key: 'selic_meta',
+      label: 'SELIC Meta',
+      value: fmtPctPlain(macro.selicMeta),
+      sub: null, change: null,
+      accent: 'var(--ac2)',
+    },
+    {
+      key: 'selic',
+      label: 'SELIC Over',
+      value: fmtPctPlain(macro.selic),
+      sub: null, change: null,
+      accent: 'var(--ac2)',
+    },
+    {
+      key: 'cdi',
+      label: 'CDI a.a.',
+      value: fmtPctPlain(macro.cdi),
+      sub: null, change: null,
+      accent: '#a78bfa',
+    },
+    macro.ipca12 != null && {
+      key: 'ipca',
+      label: 'IPCA 12m',
+      value: fmtPctPlain(macro.ipca12),
+      sub: macro.selic && macro.ipca12 ? `Real: ${(macro.selic - macro.ipca12).toFixed(2)}%` : null,
+      change: null,
+      accent: '#fb923c',
+    },
+    macro.ibov && {
+      key: 'ibov',
+      label: 'IBOV',
+      value: Number(macro.ibov.price).toLocaleString('pt-BR', { maximumFractionDigits: 0 }),
+      sub: fmtPct(macro.ibov.change_pct),
+      change: macro.ibov.change_pct,
+      accent: '#4ade80',
+    },
+    macro.sp500 && {
+      key: 'sp500',
+      label: 'S&P 500',
+      value: Number(macro.sp500.price).toLocaleString('pt-BR', { maximumFractionDigits: 0 }),
+      sub: fmtPct(macro.sp500.change_pct),
+      change: macro.sp500.change_pct,
+      accent: '#60a5fa',
+    },
+    macro.dolar != null && {
+      key: 'dolar',
+      label: 'USD/BRL',
+      value: `R$\u00a0${Number(macro.dolar).toFixed(3)}`,
+      sub: null, change: null,
+      accent: '#34d399',
+    },
+    macro.btc && {
+      key: 'btc',
+      label: 'BTC',
+      value: `R$\u00a0${Number(macro.btc.price_brl).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`,
+      sub: fmtPct(macro.btc.change_pct),
+      change: macro.btc.change_pct,
+      accent: '#f59e0b',
+    },
+  ].filter(Boolean)
+
+  const updatedTime = macro.updatedAt
+    ? new Date(macro.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    : null
+
+  return (
+    <div style={{
+      background: 'var(--bg2)',
+      border: '1px solid var(--bd)',
+      borderRadius: 14,
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '10px 16px 0',
+      }}>
+        <span style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 700 }}>
+          Indicadores Macro
+        </span>
+        {updatedTime && (
+          <span style={{ fontSize: 10, color: 'var(--tx3)' }}>Atualizado às {updatedTime}</span>
+        )}
+      </div>
+
+      <div style={{
+        display: 'flex',
+        overflowX: 'auto',
+        padding: '10px 10px 12px',
+        scrollbarWidth: 'none',
+        msOverflowStyle: 'none',
+      }}>
+        {indicators.map((ind, i) => (
+          <div key={ind.key} style={{ display: 'flex', flexShrink: 0, alignItems: 'center' }}>
+            <div style={{ padding: '8px 16px', minWidth: 108, textAlign: 'center' }}>
+              <div style={{
+                fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase',
+                letterSpacing: '0.07em', fontWeight: 700, marginBottom: 4,
+              }}>
+                {ind.label}
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--tx)', lineHeight: 1, marginBottom: ind.sub ? 3 : 0 }}>
+                {ind.value}
+              </div>
+              {ind.sub && (
+                <div style={{
+                  fontSize: 11, fontWeight: 600,
+                  color: ind.change != null ? (ind.change >= 0 ? 'var(--gr)' : 'var(--rd)') : 'var(--tx3)',
+                }}>
+                  {ind.sub}
+                </div>
+              )}
+              <div style={{ height: 2, borderRadius: 1, background: ind.accent, marginTop: 6, opacity: 0.7 }} />
+            </div>
+            {i < indicators.length - 1 && (
+              <div style={{ width: 1, height: 36, background: 'var(--bd)', flexShrink: 0 }} />
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function Dashboard() {
   const { portfolio, dividends, prices, macro, profile, loading } = useApp()
 
@@ -30,10 +162,6 @@ export default function Dashboard() {
   const rvP = (((byClass.stock_br || 0) + (byClass.stock_us || 0) + (byClass.crypto || 0)) / totalP) * 100
 
   const monthly = portfolio.reduce((s, a) => s + (a.estimated_monthly_dividend_per_share || 0) * a.quantity, 0)
-  const saldoProvento = dividends.reduce((s, d) => {
-    // calc available from raw dividends (simplified here, use dividend_balances in real use)
-    return s
-  }, 0)
 
   const realSelic = macro?.selic
   const ipca12 = macro?.ipca12
@@ -41,7 +169,11 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      {/* KPIs */}
+
+      {/* ── Macro Strip ── */}
+      <MacroStrip macro={macro} />
+
+      {/* ── KPIs ── */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
         <KPI label="Patrimônio Total" value={fmt.brl(totalP)} sub={`Custo: ${fmt.brl(totalC)}`} />
         <KPI label="Retorno" value={fmt.brl(ret)} sub={fmt.pct(retPct)} color={ret >= 0 ? 'var(--gr)' : 'var(--rd)'} />
@@ -50,7 +182,7 @@ export default function Dashboard() {
         {macro?.dolar && <KPI label="USD/BRL" value={fmt.brl(macro.dolar)} sub="Banco Central" />}
       </div>
 
-      {/* Allocation + Balance */}
+      {/* ── Allocation + Balance ── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <Card>
           <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Alocação por Classe</div>
@@ -88,7 +220,7 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      {/* Top assets */}
+      {/* ── Top assets ── */}
       {portfolio.length > 0 && (
         <Card>
           <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Posições em Destaque</div>
