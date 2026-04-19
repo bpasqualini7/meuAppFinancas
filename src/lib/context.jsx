@@ -16,19 +16,6 @@ export function AppProvider({ children }) {
   const [macro, setMacro] = useState(null)
   const [loading, setLoading] = useState(true)
 
-  // Auth listener
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (!session) setLoading(false)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_e, session) => {
-      setUser(session?.user ?? null)
-    })
-    return () => subscription.unsubscribe()
-  }, [])
-
-  // Load data when user is set
   const loadAll = useCallback(async (uid) => {
     setLoading(true)
     try {
@@ -48,7 +35,6 @@ export function AppProvider({ children }) {
       if (wl.status === 'fulfilled') setWatchlist(wl.value)
       if (mac.status === 'fulfilled') setMacro(mac.value)
 
-      // Fetch prices for all portfolio + watchlist assets
       const allAssets = [
         ...portData,
         ...(wl.status === 'fulfilled' ? wl.value.map(w => w.assets) : [])
@@ -62,9 +48,34 @@ export function AppProvider({ children }) {
     }
   }, [])
 
+  // Auth — detecta sessão inicial E mudanças (incluindo redirect OAuth)
+  useEffect(() => {
+    // onAuthStateChange captura TUDO: sessão inicial, login, logout, redirect OAuth
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      const currentUser = session?.user ?? null
+      setUser(currentUser)
+      if (!currentUser) {
+        setPortfolio([])
+        setDividends([])
+        setDivBalances([])
+        setWatchlist([])
+        setPrices({})
+        setProfile(null)
+        setLoading(false)
+      }
+      // loadAll é chamado pelo useEffect abaixo quando user muda
+    })
+
+    // Verifica sessão inicial (caso já esteja logado ou voltou do redirect)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session) setLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
   useEffect(() => {
     if (user) loadAll(user.id)
-    else { setPortfolio([]); setDividends([]); setWatchlist([]); setPrices({}) }
   }, [user, loadAll])
 
   const refreshPortfolio = () => user && loadAll(user.id)
@@ -94,7 +105,6 @@ export const fmt = {
   date: (s) => new Date(s).toLocaleDateString('pt-BR'),
 }
 
-// ── Labels/colors ─────────────────────────────────────────
 export const CLASS_LABEL = {
   stock_br: 'Ação BR', stock_us: 'Ação EUA', fii: 'FII',
   fixed_income: 'Renda Fixa', crypto: 'Cripto', etf_br: 'ETF BR',
@@ -106,7 +116,6 @@ export const CLASS_COLOR = {
   etf_us: '#93c5fd', other: '#94a3b8',
 }
 
-// ── Badge de atratividade ──────────────────────────────────
 export const getAttractiveBadge = (ticker, prices) => {
   const p = prices?.[ticker]
   if (!p) return null
@@ -119,11 +128,9 @@ export const getAttractiveBadge = (ticker, prices) => {
   return score >= 2 ? { level: score >= 3 ? 'strong' : 'mild', reasons } : null
 }
 
-// ── Número mágico ─────────────────────────────────────────
 export const getMagicNumber = (price, dps) =>
   dps > 0 ? Math.ceil(price / dps) : null
 
-// ── Theme vars ────────────────────────────────────────────
 export const THEME = {
   dark: {
     '--bg': '#0a0e1a', '--bg2': '#111827', '--bg3': '#1e2433', '--bg4': '#252d3d',
