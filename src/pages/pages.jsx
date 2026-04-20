@@ -1,17 +1,12 @@
 // ── PORTFOLIO ─────────────────────────────────────────────
 import { useState } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
-import { Card, Btn, Badge, AttrBadge, AssetSearch, Input, Spinner, Empty, KPI } from '../components/ui'
-import { insertOperation, insertDividend, addToWatchlist, updateProfile, ensureAsset } from '../lib/supabase'
-import { fetchNews } from '../lib/prices'
+import { Card, Btn, Badge, AttrBadge, Spinner, Empty } from '../components/ui'
+import { insertDividend, addToWatchlist, updateProfile } from '../lib/supabase'
 
 export function Portfolio() {
-  const { user, portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
+  const { portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
   const [filter, setFilter] = useState('all')
-  const [showAdd, setShowAdd] = useState(false)
-  const [selectedAsset, setSelectedAsset] = useState(null)
-  const [form, setForm] = useState({ qty: '', price: '', date: new Date().toISOString().slice(0, 10), broker: 'manual', divUsed: '' })
-  const [saving, setSaving] = useState(false)
 
   if (loading) return <Spinner />
 
@@ -21,37 +16,10 @@ export function Portfolio() {
   const balances = {}
   divBalances.forEach(d => { balances[d.ticker] = d.available_balance })
 
-  const handleAddOp = async () => {
-    if (!selectedAsset || !form.qty || !form.price) return
-    setSaving(true)
-    try {
-      // Se veio da brapi, garante que o ativo existe na tabela assets
-      const assetId = await ensureAsset(selectedAsset)
-      if (!assetId) { alert('Erro ao registrar ativo. Tente novamente.'); setSaving(false); return }
-
-      const totalValue = parseFloat(form.qty) * parseFloat(form.price)
-      const divUsed = parseFloat(form.divUsed) || 0
-      await insertOperation({
-        user_id: user.id, asset_id: assetId,
-        op_type: 'buy', quantity: parseFloat(form.qty),
-        unit_price: parseFloat(form.price), total_value: totalValue,
-        dividends_used: divUsed, out_of_pocket: totalValue - divUsed,
-        broker: form.broker, op_date: form.date, source: 'manual',
-      })
-      await refreshPortfolio()
-      setShowAdd(false)
-      setSelectedAsset(null)
-      setForm({ qty: '', price: '', date: new Date().toISOString().slice(0, 10), broker: 'manual', divUsed: '' })
-    } finally {
-      setSaving(false)
-    }
-  }
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Toolbar */}
+      {/* Filtros de classe */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <Btn onClick={() => setShowAdd(!showAdd)} color="accent">+ Adicionar Operação</Btn>
         <Btn color="ghost" onClick={() => setFilter('all')} style={{ border: filter === 'all' ? '2px solid var(--ac)' : undefined }}>Todos</Btn>
         {classes.map(c => (
           <Btn key={c} color="ghost" onClick={() => setFilter(c)} style={{ border: filter === c ? '2px solid var(--ac)' : undefined }}>
@@ -60,50 +28,8 @@ export function Portfolio() {
         ))}
       </div>
 
-      {/* Add form */}
-      {showAdd && (
-        <Card>
-          <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 16 }}>Nova Operação de Compra</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-            <div style={{ gridColumn: '1/-1' }}>
-              <label style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }}>Ativo</label>
-              <AssetSearch onSelect={setSelectedAsset} placeholder="Buscar por ticker ou nome..." />
-              {selectedAsset && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ac)' }}>✓ {selectedAsset.ticker} — {selectedAsset.name}</div>}
-            </div>
-            <Input label="Quantidade" type="number" value={form.qty} onChange={e => setForm(f => ({ ...f, qty: e.target.value }))} placeholder="0" />
-            <Input label="Preço unitário (R$)" type="number" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))} placeholder="0,00" />
-            <Input label="Data" type="date" value={form.date} onChange={e => setForm(f => ({ ...f, date: e.target.value }))} />
-            <div>
-              <label style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }}>Corretora</label>
-              <select value={form.broker} onChange={e => setForm(f => ({ ...f, broker: e.target.value }))}
-                style={{ width: '100%', padding: '9px 13px', borderRadius: 9, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 13 }}>
-                <option value="manual">Manual</option>
-                <option value="inter">Inter</option>
-                <option value="itau">Itaú</option>
-                <option value="xp">XP</option>
-                <option value="btg">BTG</option>
-              </select>
-            </div>
-            <Input label="Proventos usados (R$) — reduz PMP" type="number" value={form.divUsed} onChange={e => setForm(f => ({ ...f, divUsed: e.target.value }))} placeholder="0,00" />
-          </div>
-          {form.qty && form.price && (
-            <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 9, marginBottom: 14, fontSize: 12 }}>
-              <div>Total: <strong>{fmt.brl(parseFloat(form.qty || 0) * parseFloat(form.price || 0))}</strong></div>
-              {form.divUsed && <div style={{ color: 'var(--gr)' }}>Do bolso: <strong>{fmt.brl(parseFloat(form.qty || 0) * parseFloat(form.price || 0) - parseFloat(form.divUsed || 0))}</strong></div>}
-            </div>
-          )}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn onClick={handleAddOp} color="green" disabled={saving || !selectedAsset}>
-              {saving ? 'Salvando...' : 'Registrar Compra'}
-            </Btn>
-            <Btn onClick={() => setShowAdd(false)} color="ghost">Cancelar</Btn>
-          </div>
-        </Card>
-      )}
-
-      {/* Table */}
       {filtered.length === 0 ? (
-        <Empty icon="◈" message="Nenhum ativo na carteira ainda. Adicione sua primeira operação!" action={<Btn onClick={() => setShowAdd(true)}>+ Adicionar</Btn>} />
+        <Empty icon="◈" message="Nenhum ativo na carteira ainda. Registre operações no Extrato!" />
       ) : (
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
@@ -140,21 +66,27 @@ export function Portfolio() {
                     </td>
                     <td style={{ padding: '9px 11px' }}>
                       <div style={{ fontWeight: 800 }}>{fmt.brl(price)}</div>
-                      {p?.change_pct !== undefined && <div style={{ fontSize: 10, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(p.change_pct)}</div>}
+                      {p?.change_pct !== undefined && (
+                        <div style={{ fontSize: 10, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>
+                          {fmt.pct(p.change_pct)}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: '9px 11px' }}>
-                      <div style={{ fontWeight: 800, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.brl(res)}</div>
+                      <div style={{ fontWeight: 700, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.brl(res)}</div>
                       <div style={{ fontSize: 10, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(resPct)}</div>
                     </td>
-                    <td style={{ padding: '9px 11px', color: 'var(--tx2)' }}>{fmt.brl(a.total_dividends_received)}</td>
+                    <td style={{ padding: '9px 11px', color: 'var(--ac2)', fontWeight: 700 }}>{fmt.brl(a.cumulative_dividends)}</td>
                     <td style={{ padding: '9px 11px' }}>
-                      <span style={{ color: saldo > 0 ? 'var(--am)' : 'var(--tx3)', fontWeight: saldo > 0 ? 700 : 400 }}>{fmt.brl(saldo)}</span>
+                      <div style={{ fontWeight: 700, color: saldo > 0 ? 'var(--ac2)' : 'var(--tx3)' }}>{saldo > 0 ? fmt.brl(saldo) : '—'}</div>
                     </td>
-                    <td style={{ padding: '9px 11px' }}>
-                      {magic ? <span style={{ color: 'var(--ac)', fontWeight: 700 }}>{fmt.num(magic, 0)}</span> : <span style={{ color: 'var(--tx3)' }}>—</span>}
+                    <td style={{ padding: '9px 11px', color: 'var(--am)', fontWeight: 700 }}>
+                      {magic ? `${magic}x` : '—'}
                     </td>
                     <td style={{ padding: '9px 11px' }}><AttrBadge ticker={a.ticker} prices={prices} /></td>
-                    <td style={{ padding: '9px 11px', fontSize: 15 }}>{a.is_c20a ? '⭐' : '○'}</td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <Badge color={a.c20a_included ? 'green' : 'accent'}>{a.c20a_included ? '✓' : '+'}</Badge>
+                    </td>
                   </tr>
                 )
               })}
@@ -166,7 +98,6 @@ export function Portfolio() {
   )
 }
 
-// ── C20A ──────────────────────────────────────────────────
 export function C20A() {
   const { portfolio, prices } = useApp()
   const c20a = portfolio.filter(a => a.is_c20a)
