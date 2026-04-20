@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 7,
-  patch: 3,
+  patch: 4,
   date: '2026-04-20',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.7.4', date: '20/04/2026', desc: 'Cenário isolado em arquivo próprio — fix definitivo de carregamento' },
   { version: 'v0.7.3', date: '20/04/2026', desc: 'Cenário: feeds RSS do Banco Central (notas, Copom, Focus, press releases)' },
   { version: 'v0.7.2', date: '20/04/2026', desc: 'Fix Cenário — fetchNews desabilitado (CORS), componente não trava mais' },
   { version: 'v0.7.1', date: '20/04/2026', desc: 'Fix Cenário (useEffect), Proventos, imports faltando, mobile bottom nav' },

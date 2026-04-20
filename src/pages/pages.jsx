@@ -342,62 +342,6 @@ export function Proventos() {
 }
 
 // ── CENÁRIO ECONÔMICO ─────────────────────────────────────
-export function Cenario() {
-  const { macro } = useApp()
-  const [news, setNews] = useState([])
-  const [loadingNews, setLoadingNews] = useState(true)
-
-  useEffect(() => {
-    fetchNews()
-      .then(n => { setNews(n || []); setLoadingNews(false) })
-      .catch(() => { setNews([]); setLoadingNews(false) })
-  }, [])
-
-  const selicReal = macro?.selic && macro?.ipca12 ? macro.selic - macro.ipca12 : null
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* Macro */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 12 }}>
-        {macro?.selic && <KPI label="Selic" value={`${fmt.num(macro.selic, 2)}%`} sub="a.a. — Banco Central" color="var(--ac)" />}
-        {macro?.ipca12 && <KPI label="IPCA 12m" value={`${fmt.num(macro.ipca12, 2)}%`} sub="Acumulado" color="var(--am)" />}
-        {selicReal && <KPI label="Selic Real" value={`${fmt.num(selicReal, 2)}%`} sub="Selic − IPCA" color={selicReal > 4 ? 'var(--gr)' : 'var(--am)'} />}
-        {macro?.dolar && <KPI label="Dólar" value={fmt.brl(macro.dolar)} sub="USD/BRL" />}
-      </div>
-
-      {/* Indicator */}
-      {macro?.selic && macro?.ipca12 && (
-        <Card style={{ background: selicReal > 5 ? 'rgba(34,197,94,.05)' : 'rgba(245,158,11,.05)', border: `1px solid ${selicReal > 5 ? 'rgba(34,197,94,.3)' : 'rgba(245,158,11,.3)'}` }}>
-          <div style={{ fontSize: 13, color: 'var(--tx2)', lineHeight: 1.6 }}>
-            {selicReal > 5
-              ? `📈 Renda fixa atraente — Selic real de ${fmt.num(selicReal, 2)}% está acima de 5%. Momento favorável para posições em RF.`
-              : `⚠ Selic real de ${fmt.num(selicReal, 2)}% — avalie se a rentabilidade real compensa frente à inflação.`}
-          </div>
-        </Card>
-      )}
-
-      {/* News */}
-      <Card>
-        <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Últimas Notícias</div>
-        {loadingNews ? <Spinner /> : !news || news.length === 0 ? (
-          <div style={{ color: 'var(--tx3)', fontSize: 13 }}>Feed de notícias indisponível no momento.</div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-            {news.map((n, i) => (
-              <a key={i} href={n.link} target="_blank" rel="noopener noreferrer" style={{
-                display: 'block', padding: '12px 0', borderBottom: i < news.length - 1 ? '1px solid var(--bd)' : 'none',
-                textDecoration: 'none', color: 'var(--tx)',
-              }}>
-                <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3 }}>{n.title}</div>
-                <div style={{ fontSize: 11, color: 'var(--tx3)' }}>{n.source} · {new Date(n.date).toLocaleDateString('pt-BR')}</div>
-              </a>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  )
-}
 
 // ── GUIA / WIKI ───────────────────────────────────────────
 const GUIDE = [
