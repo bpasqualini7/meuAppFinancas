@@ -126,6 +126,21 @@ const detectAssetClass = (ticker, brapiData) => {
   return 'stock_br'
 }
 
+// Monta sugestão local baseada no ticker digitado (fallback sem API)
+const localSuggest = (query) => {
+  const q = query.toUpperCase().trim()
+  if (q.length < 2) return []
+  const assetClass = detectAssetClass(q, null)
+  return [{
+    id: `local_${q}`,
+    ticker: q,
+    name: q,  // será atualizado ao salvar via brapi
+    asset_class: assetClass,
+    sector: null,
+    _fromBrapi: true,
+  }]
+}
+
 // Busca na brapi por ticker exato — retorna objeto compatível com assets
 const searchBrapi = async (query) => {
   const q = query.toUpperCase().trim()
@@ -133,20 +148,21 @@ const searchBrapi = async (query) => {
   try {
     const token = import.meta.env.VITE_BRAPI_TOKEN || ''
     const r = await fetch(`https://brapi.dev/api/quote/${q}?fundamental=true&token=${token}`)
+    if (!r.ok) return localSuggest(q)  // fallback local se brapi falhar
     const d = await r.json()
     const result = d.results?.[0]
-    if (!result || result.error) return []
+    if (!result || result.error) return localSuggest(q)
     const assetClass = detectAssetClass(q, result)
     return [{
-      id: `brapi_${q}`,          // ID temporário — será resolvido no upsert
+      id: `brapi_${q}`,
       ticker: q,
       name: result.longName || result.shortName || q,
       asset_class: assetClass,
       sector: result.sector || null,
-      _fromBrapi: true,           // flag para o upsert saber que precisa criar no assets
+      _fromBrapi: true,
     }]
   } catch {
-    return []
+    return localSuggest(q)
   }
 }
 

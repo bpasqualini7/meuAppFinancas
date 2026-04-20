@@ -128,6 +128,7 @@ export function AssetSearch({ onSelect, placeholder = 'Buscar ativo...' }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [open, setOpen] = useState(false)
+  const [loading, setLoading] = useState(false)
   const ref = useRef(null)
 
   useEffect(() => {
@@ -137,24 +138,39 @@ export function AssetSearch({ onSelect, placeholder = 'Buscar ativo...' }) {
   }, [])
 
   useEffect(() => {
-    if (query.length < 2) { setResults([]); return }
+    if (query.length < 2) { setResults([]); setOpen(false); return }
+    setLoading(true)
     const t = setTimeout(async () => {
       const data = await searchAssets(query)
       setResults(data || [])
       setOpen(true)
-    }, 300)
+      setLoading(false)
+    }, 400)
     return () => clearTimeout(t)
   }, [query])
 
+  const badgeColor = (cls) => ({
+    fii: 'fii', crypto: 'crypto', stock_us: 'accent', etf_br: 'green', etf_us: 'accent',
+  }[cls] || 'green')
+
   return (
     <div ref={ref} style={{ position: 'relative' }}>
-      <input
-        value={query}
-        onChange={e => setQuery(e.target.value)}
-        onFocus={() => results.length && setOpen(true)}
-        placeholder={placeholder}
-        style={{ width: '100%', padding: '9px 14px', borderRadius: 10, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 13 }}
-      />
+      <div style={{ position: 'relative' }}>
+        <input
+          value={query}
+          onChange={e => setQuery(e.target.value.toUpperCase())}
+          onFocus={() => results.length && setOpen(true)}
+          placeholder={placeholder}
+          style={{
+            width: '100%', padding: '9px 36px 9px 14px', borderRadius: 10,
+            border: '1px solid var(--bd)', background: 'var(--bg3)',
+            color: 'var(--tx)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box',
+          }}
+        />
+        {loading && (
+          <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', width: 14, height: 14, border: '2px solid var(--bd)', borderTop: '2px solid var(--ac)', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+        )}
+      </div>
       {open && results.length > 0 && (
         <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 10, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,.3)', overflow: 'hidden', marginTop: 4 }}>
           {results.map(a => (
@@ -163,11 +179,12 @@ export function AssetSearch({ onSelect, placeholder = 'Buscar ativo...' }) {
               onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
               onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
               <div>
-                <span style={{ fontWeight: 700, color: 'var(--tx)' }}>{a.ticker}</span>
-                <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--tx3)' }}>{a.name}</span>
+                <span style={{ fontWeight: 800, fontSize: 14, color: 'var(--tx)', fontFamily: 'monospace' }}>{a.ticker}</span>
+                {a.name !== a.ticker && <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--tx3)' }}>{a.name}</span>}
+                {a.id?.startsWith('local_') && <span style={{ marginLeft: 6, fontSize: 10, color: 'var(--tx3)', opacity: 0.6 }}>· cadastro manual</span>}
               </div>
-              <Badge color={a.asset_class === 'fii' ? 'fii' : a.asset_class === 'crypto' ? 'crypto' : 'green'}>
-                {CLASS_LABEL[a.asset_class]}
+              <Badge color={badgeColor(a.asset_class)}>
+                {CLASS_LABEL[a.asset_class] || a.asset_class}
               </Badge>
             </div>
           ))}
