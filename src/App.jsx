@@ -12,6 +12,7 @@ import Guia from './pages/Guia'
 import Settings from './pages/Settings'
 import { Spinner } from './components/ui'
 import { signOut } from './lib/supabase'
+import { VERSION_STRING, BUILD_DATE } from './lib/version'
 
 const NAV = [
   { id: 'dashboard',  icon: '⬡',  label: 'Dashboard' },
@@ -116,13 +117,18 @@ function Layout() {
         </div>
 
         {/* Footer */}
-        <div style={{ padding: collapsed ? '12px 0' : '12px 16px', borderTop: '1px solid var(--bd)', display: 'flex', justifyContent: collapsed ? 'center' : 'flex-start' }}>
+        <div style={{ padding: collapsed ? '12px 0' : '12px 16px 10px', borderTop: '1px solid var(--bd)', display: 'flex', flexDirection: 'column', alignItems: collapsed ? 'center' : 'flex-start', gap: 6 }}>
           <button onClick={signOut} title="Sair" style={{
             background: 'none', border: 'none', color: 'var(--tx3)',
             fontSize: collapsed ? 16 : 12, cursor: 'pointer', fontFamily: 'inherit',
           }}>
             {collapsed ? '→' : '→ Sair'}
           </button>
+          {!collapsed && (
+            <div style={{ fontSize: 10, color: 'var(--tx3)', opacity: 0.5, fontFamily: 'monospace', letterSpacing: '0.03em' }}>
+              {VERSION_STRING} · {BUILD_DATE}
+            </div>
+          )}
         </div>
       </nav>
 
