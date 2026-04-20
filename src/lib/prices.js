@@ -136,25 +136,8 @@ export const fetchMacro = async () => {
 
 // Fetch news via RSS (InfoMoney → CORS proxy)
 export const fetchNews = async () => {
-  const hit = fromCache('__news__')
-  if (hit) return hit
-  try {
-    const feeds = [
-      'https://api.rss2json.com/v1/api.json?rss_url=https://www.infomoney.com.br/feed/',
-      'https://api.rss2json.com/v1/api.json?rss_url=https://br.investing.com/rss/news.rss',
-    ]
-    const r = await fetch(feeds[0])
-    const d = await r.json()
-    const items = (d.items || []).slice(0, 8).map(i => ({
-      title: i.title,
-      link: i.link,
-      date: i.pubDate,
-      source: 'InfoMoney',
-    }))
-    return cached('__news__', items)
-  } catch {
-    return []
-  }
+  // RSS feed indisponível no plano gratuito — retorna vazio sem quebrar
+  return []
 }
 
 // Auto-detect asset type and fetch accordingly

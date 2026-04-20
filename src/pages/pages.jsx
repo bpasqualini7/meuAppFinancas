@@ -348,7 +348,9 @@ export function Cenario() {
   const [loadingNews, setLoadingNews] = useState(true)
 
   useEffect(() => {
-    fetchNews().then(n => { setNews(n || []); setLoadingNews(false) })
+    fetchNews()
+      .then(n => { setNews(n || []); setLoadingNews(false) })
+      .catch(() => { setNews([]); setLoadingNews(false) })
   }, [])
 
   const selicReal = macro?.selic && macro?.ipca12 ? macro.selic - macro.ipca12 : null
@@ -377,8 +379,8 @@ export function Cenario() {
       {/* News */}
       <Card>
         <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Últimas Notícias</div>
-        {loadingNews ? <Spinner /> : news.length === 0 ? (
-          <div style={{ color: 'var(--tx3)', fontSize: 13 }}>Nenhuma notícia carregada. Verifique conexão.</div>
+        {loadingNews ? <Spinner /> : !news || news.length === 0 ? (
+          <div style={{ color: 'var(--tx3)', fontSize: 13 }}>Feed de notícias indisponível no momento.</div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             {news.map((n, i) => (
