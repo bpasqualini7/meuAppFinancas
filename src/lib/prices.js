@@ -87,15 +87,16 @@ export const fetchMacro = async () => {
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json').then(r => r.json()),
       // CDI over diário (série 12)
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
-      // Ibovespa via Yahoo Finance
-      fetch('https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval=1d&range=2d', {headers:{'User-Agent':'Mozilla/5.0'}}).then(r => r.json()),
-      // S&P500 via Yahoo Finance
-      fetch('https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=2d', {headers:{'User-Agent':'Mozilla/5.0'}}).then(r => r.json()),
+      // Ibovespa via brapi (token obrigatório para índices — plano pago)
+      brapiUrl('/quote/%5EBVSP?range=1d&interval=1d') ? fetch(brapiUrl('/quote/%5EBVSP?range=1d&interval=1d')).then(r => r.json()).catch(() => null) : Promise.resolve(null),
+      // S&P500 via brapi (plano pago)
+      fetch(brapiUrl('/quote/%5EGSPC?range=1d&interval=1d')).then(r => r.json()).catch(() => null),
       // BTC/BRL via CoinGecko
       fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true', {headers:{'Accept':'application/json'}}).then(r => r.json()),
     ])
 
-    const selic = selicR.status === 'fulfilled' ? parseFloat(selicR.value?.[0]?.valor) : null
+    const selicDiario = selicR.status === 'fulfilled' ? parseFloat(selicR.value?.[0]?.valor) : null
+    const selic = selicDiario != null ? ((Math.pow(1 + selicDiario / 100, 252) - 1) * 100) : null
     const selicMeta = selicMetaR.status === 'fulfilled' ? parseFloat(selicMetaR.value?.[0]?.valor) : null
     const cdiDiario = cdiR.status === 'fulfilled' ? parseFloat(cdiR.value?.[0]?.valor) : null
     // CDI anualizado: (1 + taxa_diaria/100)^252 - 1
@@ -106,15 +107,15 @@ export const fetchMacro = async () => {
 
     const dolar = dolarR.status === 'fulfilled' ? parseFloat(dolarR.value?.[0]?.valor) : null
 
-    const parseYahoo = (r) => {
+    const parseBrapi = (r) => {
       try {
-        const meta = r?.chart?.result?.[0]?.meta
-        if (!meta) return null
-        return { price: meta.regularMarketPrice, change_pct: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100 }
+        const q = r?.results?.[0]
+        if (!q || q.error) return null
+        return { price: q.regularMarketPrice, change_pct: q.regularMarketChangePercent }
       } catch { return null }
     }
-    const ibov = ibovR.status === 'fulfilled' ? parseYahoo(ibovR.value) : null
-    const sp500 = spR.status === 'fulfilled' ? parseYahoo(spR.value) : null
+    const ibov = ibovR.status === 'fulfilled' ? parseBrapi(ibovR.value) : null
+    const sp500 = spR.status === 'fulfilled' ? parseBrapi(spR.value) : null
 
     const btcData = btcR.status === 'fulfilled' ? btcR.value?.bitcoin : null
     const btc = btcData ? {
