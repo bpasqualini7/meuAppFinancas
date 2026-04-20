@@ -118,7 +118,7 @@ export function Portfolio() {
               {filtered.map((a, i) => {
                 const p = prices[a.ticker], price = p?.price || a.avg_price
                 const res = (price - a.avg_price) * a.quantity
-                const resPct = ((price - a.avg_price) / a.avg_price) * 100
+                const resPct = a.avg_price ? ((price - a.avg_price) / a.avg_price) * 100 : 0
                 const magic = getMagicNumber(price, a.estimated_monthly_dividend_per_share)
                 const saldo = balances[a.ticker] || 0
                 return (

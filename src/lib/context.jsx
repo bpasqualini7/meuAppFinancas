@@ -99,9 +99,9 @@ export function AppProvider({ children }) {
 
 // ── Formatters ────────────────────────────────────────────
 export const fmt = {
-  brl: (v) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v || 0),
-  pct: (v) => `${Number(v || 0) >= 0 ? '+' : ''}${Number(v || 0).toFixed(2)}%`,
-  num: (v, d = 2) => Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }),
+  brl: (v) => { const n = Number(v); return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(isFinite(n) ? n : 0) },
+  pct: (v) => { const n = Number(v); if (!isFinite(n)) return '—'; return `${n >= 0 ? '+' : ''}${n.toFixed(2)}%` },
+  num: (v, d = 2) => { const n = Number(v); return isFinite(n) ? n.toLocaleString('pt-BR', { minimumFractionDigits: d, maximumFractionDigits: d }) : '—' },
   date: (s) => new Date(s).toLocaleDateString('pt-BR'),
 }
 

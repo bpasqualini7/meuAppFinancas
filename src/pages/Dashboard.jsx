@@ -157,9 +157,9 @@ export default function Dashboard() {
   const rfT = profile?.target_rf_pct || age
   const fiiT = profile?.target_fii_pct || (100 - age) / 2
   const rvT = profile?.target_rv_pct || (100 - age) / 2
-  const rfP = ((byClass.fixed_income || 0) / totalP) * 100
-  const fiiP = ((byClass.fii || 0) / totalP) * 100
-  const rvP = (((byClass.stock_br || 0) + (byClass.stock_us || 0) + (byClass.crypto || 0)) / totalP) * 100
+  const rfP = totalP ? ((byClass.fixed_income || 0) / totalP) * 100 : 0
+  const fiiP = totalP ? ((byClass.fii || 0) / totalP) * 100 : 0
+  const rvP = totalP ? (((byClass.stock_br || 0) + (byClass.stock_us || 0) + (byClass.crypto || 0)) / totalP) * 100 : 0
 
   const monthly = portfolio.reduce((s, a) => s + (a.estimated_monthly_dividend_per_share || 0) * a.quantity, 0)
 
@@ -237,7 +237,7 @@ export default function Dashboard() {
                   </div>
                   <div style={{ fontSize: 16, fontWeight: 800 }}>{fmt.brl(price)}</div>
                   <div style={{ fontSize: 11, color: res >= 0 ? 'var(--gr)' : 'var(--rd)', marginTop: 2 }}>
-                    {fmt.brl(res)} ({fmt.pct(((price - a.avg_price) / a.avg_price) * 100)})
+                    {fmt.brl(res)} ({fmt.pct(a.avg_price ? ((price - a.avg_price) / a.avg_price) * 100 : 0)})
                   </div>
                   {p?.change_pct !== undefined && (
                     <div style={{ fontSize: 10, color: 'var(--tx3)', marginTop: 2 }}>
