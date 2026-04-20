@@ -59,7 +59,7 @@ function Layout() {
   const sideW = collapsed ? 56 : 210
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', alignItems: 'flex-start' }}>
+    <div style={{ display: 'flex', background: 'var(--bg)', alignItems: 'flex-start' }}>
       {/* Sidebar */}
       <nav style={{
         width: sideW, background: 'var(--bg2)', borderRight: '1px solid var(--bd)',

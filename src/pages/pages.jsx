@@ -1,7 +1,7 @@
 // ── PORTFOLIO ─────────────────────────────────────────────
 import { useState } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
-import { Card, Btn, Badge, AttrBadge, Spinner, Empty } from '../components/ui'
+import { Card, Btn, Badge, AttrBadge, Spinner, Empty, Input } from '../components/ui'
 import { insertDividend, addToWatchlist, updateProfile } from '../lib/supabase'
 
 export function Portfolio() {
