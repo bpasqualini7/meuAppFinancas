@@ -87,12 +87,12 @@ export const fetchMacro = async () => {
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json').then(r => r.json()),
       // CDI over diário (série 12)
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
-      // Ibovespa via brapi
-      fetch(brapiUrl('/quote/%5EBVSP?range=5d&interval=1d')).then(r => r.json()),
-      // S&P500 via brapi
-      fetch(brapiUrl('/quote/%5EGSPC?range=5d&interval=1d')).then(r => r.json()),
+      // Ibovespa via Yahoo Finance
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/%5EBVSP?interval=1d&range=2d', {headers:{'User-Agent':'Mozilla/5.0'}}).then(r => r.json()),
+      // S&P500 via Yahoo Finance
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?interval=1d&range=2d', {headers:{'User-Agent':'Mozilla/5.0'}}).then(r => r.json()),
       // BTC/BRL via CoinGecko
-      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true').then(r => r.json()),
+      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true', {headers:{'Accept':'application/json'}}).then(r => r.json()),
     ])
 
     const selic = selicR.status === 'fulfilled' ? parseFloat(selicR.value?.[0]?.valor) : null
@@ -106,17 +106,15 @@ export const fetchMacro = async () => {
 
     const dolar = dolarR.status === 'fulfilled' ? parseFloat(dolarR.value?.[0]?.valor) : null
 
-    const ibovQ = ibovR.status === 'fulfilled' ? ibovR.value?.results?.[0] : null
-    const ibov = ibovQ ? {
-      price: ibovQ.regularMarketPrice,
-      change_pct: ibovQ.regularMarketChangePercent,
-    } : null
-
-    const spQ = spR.status === 'fulfilled' ? spR.value?.results?.[0] : null
-    const sp500 = spQ ? {
-      price: spQ.regularMarketPrice,
-      change_pct: spQ.regularMarketChangePercent,
-    } : null
+    const parseYahoo = (r) => {
+      try {
+        const meta = r?.chart?.result?.[0]?.meta
+        if (!meta) return null
+        return { price: meta.regularMarketPrice, change_pct: ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100 }
+      } catch { return null }
+    }
+    const ibov = ibovR.status === 'fulfilled' ? parseYahoo(ibovR.value) : null
+    const sp500 = spR.status === 'fulfilled' ? parseYahoo(spR.value) : null
 
     const btcData = btcR.status === 'fulfilled' ? btcR.value?.bitcoin : null
     const btc = btcData ? {
