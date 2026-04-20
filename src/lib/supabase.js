@@ -115,14 +115,23 @@ export const addToWatchlist = async (userId, assetId) => {
 // ── Assets search (autocomplete) ──────────────────────────
 // Detecta classe do ativo pelo sufixo/padrão do ticker
 const detectAssetClass = (ticker, brapiData) => {
-  const t = ticker.toUpperCase()
-  // FIIs: terminam em 11 e não são ETFs conhecidos
-  const ETF_BR = ['BOVA11','SMAL11','IVVB11','HASH11','GOLD11','DIVO11','FIND11','BBSD11','SPXI11','EURP11']
+  const t = ticker.toUpperCase().trim()
+
+  // ETFs conhecidos (terminam em 11 mas não são FIIs)
+  const ETF_BR = ['BOVA11','SMAL11','IVVB11','HASH11','GOLD11','DIVO11','FIND11',
+                  'BBSD11','SPXI11','EURP11','FIXA11','ISUS11','XFIX11','BDIV11',
+                  'ECOO11','MATB11','GOVB11','IMAB11','IRFM11','LFTE11']
   if (ETF_BR.includes(t)) return 'etf_br'
-  if (t.endsWith('11') && t.length <= 7) return 'fii'
-  // Ações BR: 4 letras + 1-2 dígitos (ex: PETR4, VALE3, BBAS3)
-  if (/^[A-Z]{4}\d{1,2}$/.test(t)) return 'stock_br'
-  // Ações BR3 (unit): ex BPAC11 — já pego em fii acima, mas pode ter exceção
+
+  // FIIs: 4-6 letras + 11 (ex: MXRF11, HGLG11, KNRI11, XPML11)
+  if (/^[A-Z]{4,6}11$/.test(t)) return 'fii'
+
+  // BDRs: 4 letras + 34 (ex: AAPL34, MSFT34) — checar ANTES de stock_br
+  if (/^[A-Z]{4}34$/.test(t)) return 'stock_us'
+
+  // Ações BR: 4 letras + 1 dígito (ex: PETR4, VALE3) ou + F (ex: PETR4F)
+  if (/^[A-Z]{4}\d{1,2}F?$/.test(t)) return 'stock_br'
+
   return 'stock_br'
 }
 
