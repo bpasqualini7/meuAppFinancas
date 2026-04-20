@@ -59,12 +59,12 @@ function Layout() {
   const sideW = collapsed ? 56 : 210
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--bg)', alignItems: 'flex-start' }}>
       {/* Sidebar */}
       <nav style={{
         width: sideW, background: 'var(--bg2)', borderRight: '1px solid var(--bd)',
         display: 'flex', flexDirection: 'column', position: 'fixed',
-        top: 0, left: 0, bottom: 0, zIndex: 50,
+        top: 0, left: 0, height: '100vh', zIndex: 50,
         transition: 'width .2s cubic-bezier(.4,0,.2,1)', overflow: 'hidden',
       }}>
         {/* Header */}
@@ -133,7 +133,7 @@ function Layout() {
       </nav>
 
       {/* Main */}
-      <main style={{ marginLeft: sideW, flex: 1, padding: 28, minHeight: '100vh', transition: 'margin-left .2s cubic-bezier(.4,0,.2,1)' }}>
+      <main style={{ marginLeft: sideW, flex: 1, padding: 28, paddingBottom: 40, transition: 'margin-left .2s cubic-bezier(.4,0,.2,1)' }}>
         <div style={{ maxWidth: 1200 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--tx)', marginBottom: 20, letterSpacing: '-0.02em' }}>
             {NAV.find(n => n.id === page)?.label}
