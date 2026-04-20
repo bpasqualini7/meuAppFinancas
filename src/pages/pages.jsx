@@ -1,5 +1,5 @@
 // ── PORTFOLIO ─────────────────────────────────────────────
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Spinner, Empty, Input, KPI } from '../components/ui'
 import { insertDividend, addToWatchlist, updateProfile } from '../lib/supabase'
@@ -347,9 +347,9 @@ export function Cenario() {
   const [news, setNews] = useState([])
   const [loadingNews, setLoadingNews] = useState(true)
 
-  useState(() => {
+  useEffect(() => {
     fetchNews().then(n => { setNews(n || []); setLoadingNews(false) })
-  })
+  }, [])
 
   const selicReal = macro?.selic && macro?.ipca12 ? macro.selic - macro.ipca12 : null
 
