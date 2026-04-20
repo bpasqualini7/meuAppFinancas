@@ -1,5 +1,8 @@
 // ── Price fetching — brapi.dev (BR) + CoinGecko (crypto) ──
 
+const BRAPI_TOKEN = import.meta.env.VITE_BRAPI_TOKEN || ''
+const brapiUrl = (path) => `https://brapi.dev/api${path}${path.includes('?') ? '&' : '?'}token=${BRAPI_TOKEN}`
+
 const CACHE = {}
 const TTL = 15 * 60 * 1000 // 15 min
 
@@ -18,7 +21,7 @@ export const fetchBR = async (ticker) => {
   if (hit) return hit
   try {
     const r = await fetch(
-      `https://brapi.dev/api/quote/${ticker}?fundamental=true&range=1d&interval=1d`
+      brapiUrl(`/quote/${ticker}?fundamental=true&range=1d&interval=1d`)
     )
     const d = await r.json()
     const q = d.results?.[0]
@@ -85,9 +88,9 @@ export const fetchMacro = async () => {
       // CDI over diário (série 12)
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
       // Ibovespa via brapi
-      fetch('https://brapi.dev/api/quote/%5EBVSP?range=5d&interval=1d').then(r => r.json()),
+      fetch(brapiUrl('/quote/%5EBVSP?range=5d&interval=1d')).then(r => r.json()),
       // S&P500 via brapi
-      fetch('https://brapi.dev/api/quote/%5EGSPC?range=5d&interval=1d').then(r => r.json()),
+      fetch(brapiUrl('/quote/%5EGSPC?range=5d&interval=1d')).then(r => r.json()),
       // BTC/BRL via CoinGecko
       fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true').then(r => r.json()),
     ])

@@ -131,7 +131,8 @@ const searchBrapi = async (query) => {
   const q = query.toUpperCase().trim()
   if (q.length < 2) return []
   try {
-    const r = await fetch(`https://brapi.dev/api/quote/${q}?fundamental=true`)
+    const token = import.meta.env.VITE_BRAPI_TOKEN || ''
+    const r = await fetch(`https://brapi.dev/api/quote/${q}?fundamental=true&token=${token}`)
     const d = await r.json()
     const result = d.results?.[0]
     if (!result || result.error) return []
