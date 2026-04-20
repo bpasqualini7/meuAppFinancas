@@ -135,8 +135,49 @@ export const fetchMacro = async () => {
 }
 
 // Fetch news via RSS (InfoMoney → CORS proxy)
+// Feeds RSS do Banco Central do Brasil
+const BCB_FEEDS = [
+  { url: 'https://www.bcb.gov.br/api/feed/pt-br/notas/rss',         label: 'BCB — Notas' },
+  { url: 'https://www.bcb.gov.br/api/feed/pt-br/pressreleases/rss', label: 'BCB — Press Releases' },
+  { url: 'https://www.bcb.gov.br/api/feed/pt-br/copom/rss',         label: 'BCB — Copom' },
+  { url: 'https://www.bcb.gov.br/api/feed/pt-br/boletimfocus/rss',  label: 'BCB — Focus' },
+]
+
+const parseRSS = (xmlText, source) => {
+  try {
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(xmlText, 'text/xml')
+    const items = [...doc.querySelectorAll('item')].slice(0, 5)
+    return items.map(item => ({
+      title: item.querySelector('title')?.textContent || '',
+      link: item.querySelector('link')?.textContent || '#',
+      date: item.querySelector('pubDate')?.textContent || '',
+      source,
+    }))
+  } catch { return [] }
+}
+
 export const fetchNews = async () => {
-  // RSS feed indisponível no plano gratuito — retorna vazio sem quebrar
+  const hit = fromCache('__news__')
+  if (hit) return hit
+
+  const results = []
+  await Promise.allSettled(
+    BCB_FEEDS.map(async ({ url, label }) => {
+      try {
+        const r = await fetch(url)
+        if (!r.ok) return
+        const text = await r.text()
+        if (!text.includes('<item>')) return
+        const items = parseRSS(text, label)
+        results.push(...items)
+      } catch { /* ignora feeds com erro */ }
+    })
+  )
+
+  // Ordenar por data mais recente
+  const sorted = results.sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10)
+  if (sorted.length > 0) return cached('__news__', sorted)
   return []
 }
 
