@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Input, Spinner, Empty, KPI } from '../components/ui'
-import { insertOperation, insertDividend, addToWatchlist, updateProfile } from '../lib/supabase'
+import { insertOperation, insertDividend, addToWatchlist, updateProfile, ensureAsset } from '../lib/supabase'
 import { fetchNews } from '../lib/prices'
 
 export function Portfolio() {
@@ -25,10 +25,14 @@ export function Portfolio() {
     if (!selectedAsset || !form.qty || !form.price) return
     setSaving(true)
     try {
+      // Se veio da brapi, garante que o ativo existe na tabela assets
+      const assetId = await ensureAsset(selectedAsset)
+      if (!assetId) { alert('Erro ao registrar ativo. Tente novamente.'); setSaving(false); return }
+
       const totalValue = parseFloat(form.qty) * parseFloat(form.price)
       const divUsed = parseFloat(form.divUsed) || 0
       await insertOperation({
-        user_id: user.id, asset_id: selectedAsset.id,
+        user_id: user.id, asset_id: assetId,
         op_type: 'buy', quantity: parseFloat(form.qty),
         unit_price: parseFloat(form.price), total_value: totalValue,
         dividends_used: divUsed, out_of_pocket: totalValue - divUsed,

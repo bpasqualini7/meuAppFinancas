@@ -113,14 +113,86 @@ export const addToWatchlist = async (userId, assetId) => {
 }
 
 // ── Assets search (autocomplete) ──────────────────────────
+// Detecta classe do ativo pelo sufixo/padrão do ticker
+const detectAssetClass = (ticker, brapiData) => {
+  const t = ticker.toUpperCase()
+  // FIIs: terminam em 11 e não são ETFs conhecidos
+  const ETF_BR = ['BOVA11','SMAL11','IVVB11','HASH11','GOLD11','DIVO11','FIND11','BBSD11','SPXI11','EURP11']
+  if (ETF_BR.includes(t)) return 'etf_br'
+  if (t.endsWith('11') && t.length <= 7) return 'fii'
+  // Ações BR: 4 letras + 1-2 dígitos (ex: PETR4, VALE3, BBAS3)
+  if (/^[A-Z]{4}\d{1,2}$/.test(t)) return 'stock_br'
+  // Ações BR3 (unit): ex BPAC11 — já pego em fii acima, mas pode ter exceção
+  return 'stock_br'
+}
+
+// Busca na brapi por ticker exato — retorna objeto compatível com assets
+const searchBrapi = async (query) => {
+  const q = query.toUpperCase().trim()
+  if (q.length < 2) return []
+  try {
+    const r = await fetch(`https://brapi.dev/api/quote/${q}?fundamental=true`)
+    const d = await r.json()
+    const result = d.results?.[0]
+    if (!result || result.error) return []
+    const assetClass = detectAssetClass(q, result)
+    return [{
+      id: `brapi_${q}`,          // ID temporário — será resolvido no upsert
+      ticker: q,
+      name: result.longName || result.shortName || q,
+      asset_class: assetClass,
+      sector: result.sector || null,
+      _fromBrapi: true,           // flag para o upsert saber que precisa criar no assets
+    }]
+  } catch {
+    return []
+  }
+}
+
+// Busca primeiro no Supabase, fallback na brapi
 export const searchAssets = async (query) => {
+  const q = query.trim()
+  if (q.length < 2) return []
+
+  // 1. Supabase
+  try {
+    const { data } = await supabase
+      .from('assets')
+      .select('id, ticker, name, asset_class, sector')
+      .or(`ticker.ilike.%${q}%,name.ilike.%${q}%`)
+      .limit(8)
+
+    if (data && data.length > 0) return data
+  } catch { /* silently fallback */ }
+
+  // 2. Fallback: brapi (ticker exato)
+  return searchBrapi(q)
+}
+
+// Garante que o ativo existe na tabela assets — cria se vier da brapi
+export const ensureAsset = async (asset) => {
+  if (!asset._fromBrapi) return asset.id
+
+  // Tenta inserir (ignora se já existe)
   const { data, error } = await supabase
     .from('assets')
-    .select('id, ticker, name, asset_class, sector')
-    .or(`ticker.ilike.%${query}%,name.ilike.%${query}%`)
-    .limit(10)
-  if (error) throw error
-  return data
+    .upsert(
+      { ticker: asset.ticker, name: asset.name, asset_class: asset.asset_class, sector: asset.sector },
+      { onConflict: 'ticker' }
+    )
+    .select('id')
+    .single()
+
+  if (error) {
+    // Se deu conflito, busca o id existente
+    const { data: existing } = await supabase
+      .from('assets')
+      .select('id')
+      .eq('ticker', asset.ticker)
+      .single()
+    return existing?.id
+  }
+  return data?.id
 }
 
 // ── Profile ───────────────────────────────────────────────
