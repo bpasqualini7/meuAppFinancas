@@ -18,6 +18,15 @@
       ::-webkit-scrollbar { width: 5px; height: 5px; }
       ::-webkit-scrollbar-track { background: var(--bg2); }
       ::-webkit-scrollbar-thumb { background: var(--bd); border-radius: 3px; }
+
+      /* ── Mobile responsive ── */
+      @media (max-width: 768px) {
+        .sidebar { width: 100% !important; height: auto !important; position: relative !important; flex-direction: row !important; flex-wrap: wrap; }
+        .main-content { margin-left: 0 !important; padding: 16px !important; }
+        .nav-label { display: none !important; }
+        table { font-size: 11px !important; }
+        th, td { padding: 6px 8px !important; }
+      }
     </style>
   </head>
   <body>

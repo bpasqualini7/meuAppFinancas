@@ -36,6 +36,10 @@ function Layout() {
   const { user, profile, loading } = useApp()
   const [page, setPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  // Detectar mobile
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
 
   const theme = profile?.theme || 'dark'
   const fontSize = { sm: 12, md: 14, lg: 16 }[profile?.font_size || 'md']
@@ -56,14 +60,15 @@ function Layout() {
   if (!user) return <Login />
 
   const PageComponent = PAGES[page] || Dashboard
-  const sideW = collapsed ? 56 : 210
+  const sideW = isMobile ? 0 : (collapsed ? 56 : 210)
 
   return (
     <div style={{ display: 'flex', background: 'var(--bg)', alignItems: 'flex-start' }}>
-      {/* Sidebar */}
+      {/* Sidebar — desktop only */}
       <nav style={{
-        width: sideW, background: 'var(--bg2)', borderRight: '1px solid var(--bd)',
-        display: 'flex', flexDirection: 'column', position: 'fixed',
+        width: isMobile ? 0 : sideW,
+        background: 'var(--bg2)', borderRight: '1px solid var(--bd)',
+        display: isMobile ? 'none' : 'flex', flexDirection: 'column', position: 'fixed',
         top: 0, left: 0, height: '100vh', zIndex: 50,
         transition: 'width .2s cubic-bezier(.4,0,.2,1)', overflow: 'hidden',
       }}>
@@ -133,7 +138,7 @@ function Layout() {
       </nav>
 
       {/* Main */}
-      <main style={{ marginLeft: sideW, flex: 1, padding: 28, paddingBottom: 40, transition: 'margin-left .2s cubic-bezier(.4,0,.2,1)' }}>
+      <main style={{ marginLeft: isMobile ? 0 : sideW, flex: 1, padding: isMobile ? '16px 12px 80px' : '28px 28px 40px', transition: 'margin-left .2s cubic-bezier(.4,0,.2,1)', minWidth: 0, width: '100%' }}>
         <div style={{ maxWidth: 1200 }}>
           <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--tx)', marginBottom: 20, letterSpacing: '-0.02em' }}>
             {NAV.find(n => n.id === page)?.label}
@@ -141,6 +146,35 @@ function Layout() {
           <PageComponent onNavigate={setPage} />
         </div>
       </main>
+      {/* ── Bottom nav mobile ── */}
+      {isMobile && (
+        <nav style={{
+          position: 'fixed', bottom: 0, left: 0, right: 0, zIndex: 100,
+          background: 'var(--bg2)', borderTop: '1px solid var(--bd)',
+          display: 'flex', justifyContent: 'space-around', padding: '8px 0 12px',
+        }}>
+          {NAV.filter(n => ['dashboard','portfolio','extrato','proventos','settings'].includes(n.id)).map(n => (
+            <button key={n.id} onClick={() => setPage(n.id)} style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: page === n.id ? 'var(--ac)' : 'var(--tx3)',
+              fontSize: 10, fontFamily: 'inherit', padding: '4px 12px',
+            }}>
+              <span style={{ fontSize: 18 }}>{n.icon}</span>
+              <span style={{ fontWeight: page === n.id ? 700 : 400 }}>{n.label}</span>
+            </button>
+          ))}
+          <button onClick={() => setPage(page === 'watchlist' ? 'dashboard' : 'watchlist')} style={{
+            display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3,
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: ['watchlist','cenario','c20a','guia'].includes(page) ? 'var(--ac)' : 'var(--tx3)',
+            fontSize: 10, fontFamily: 'inherit', padding: '4px 12px',
+          }}>
+            <span style={{ fontSize: 18 }}>⋯</span>
+            <span>Mais</span>
+          </button>
+        </nav>
+      )}
     </div>
   )
 }
