@@ -8,6 +8,7 @@ import C20A from './pages/C20A'
 import Watchlist from './pages/Watchlist'
 import Proventos from './pages/Proventos'
 import Cenario from './pages/Cenario'
+import Realizados from './pages/Realizados'
 import Guia from './pages/Guia'
 import Settings from './pages/Settings'
 import { Spinner } from './components/ui'
@@ -18,6 +19,7 @@ const NAV = [
   { id: 'dashboard', icon: '⬡', label: 'Dashboard' },
   { id: 'portfolio', icon: '◈', label: 'Carteira' },
   { id: 'extrato',   icon: '↕', label: 'Extrato' },
+  { id: 'realizados', icon: '✓', label: 'Realizados' },
   { id: 'c20a',      icon: '⭐', label: 'C20A' },
   { id: 'watchlist', icon: '◎', label: 'Watchlist' },
   { id: 'proventos', icon: '◇', label: 'Proventos' },
@@ -53,8 +55,8 @@ const PAGES = {
 }
 
 // Bottom nav principal (5 itens) + "Mais" para o resto
-const BOTTOM_MAIN = ['dashboard', 'portfolio', 'extrato', 'proventos', 'settings']
-const BOTTOM_MORE = ['c20a', 'watchlist', 'cenario', 'guia']
+const BOTTOM_MAIN = ['dashboard', 'portfolio', 'extrato', 'realizados', 'settings']
+const BOTTOM_MORE = ['c20a', 'watchlist', 'proventos', 'cenario', 'guia']
 
 function Layout() {
   const { user, profile, loading, macro } = useApp()

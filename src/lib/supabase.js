@@ -242,6 +242,17 @@ export const updateProfile = async (userId, payload) => {
   return data
 }
 
+// ── Realized positions ───────────────────────────────────
+export const getRealizedPositions = async (userId) => {
+  const { data, error } = await supabase
+    .from('realized_positions')
+    .select('*')
+    .eq('user_id', userId)
+    .order('last_sell_date', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
 // ── Price cache ───────────────────────────────────────────
 export const getPriceCache = async (tickers) => {
   const { data, error } = await supabase
