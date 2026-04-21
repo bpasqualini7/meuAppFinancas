@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { AppProvider, useApp, THEME } from './lib/context'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -42,6 +42,23 @@ function Layout() {
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900)
   const [showMore, setShowMore] = useState(false)
+  const [navVisible, setNavVisible] = useState(true)
+  const lastScrollY = useRef(0)
+  const navAutoHide = profile?.nav_auto_hide ?? false  // false = sempre fixo
+
+  // Scroll listener para recolher/mostrar bottom nav
+  useEffect(() => {
+    if (!isMobile || !navAutoHide) { setNavVisible(true); return }
+    const handler = () => {
+      const current = window.scrollY
+      if (current < 10) { setNavVisible(true); return }
+      if (current < lastScrollY.current - 8) setNavVisible(true)   // rolou para cima
+      else if (current > lastScrollY.current + 8) setNavVisible(false) // rolou para baixo
+      lastScrollY.current = current
+    }
+    window.addEventListener('scroll', handler, { passive: true })
+    return () => window.removeEventListener('scroll', handler)
+  }, [isMobile, navAutoHide])
 
   // Detectar resize
   useEffect(() => {
@@ -210,6 +227,8 @@ function Layout() {
             background: 'var(--bg2)', borderTop: '1px solid var(--bd)',
             display: 'flex', justifyContent: 'space-around',
             padding: '6px 0 10px', boxShadow: '0 -4px 20px rgba(0,0,0,.3)',
+            transform: navVisible ? 'translateY(0)' : 'translateY(100%)',
+            transition: 'transform .25s ease',
           }}>
             {BOTTOM_MAIN.map(id => {
               const n = NAV.find(x => x.id === id)

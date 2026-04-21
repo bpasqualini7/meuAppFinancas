@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 7,
-  patch: 6,
+  patch: 7,
   date: '2026-04-20',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.7.7', date: '21/04/2026', desc: 'Item 1: nav mobile fixo/recolhível — configurável nas Settings' },
   { version: 'v0.7.6', date: '21/04/2026', desc: 'Mobile polish: grids responsivos, macro strip compacto, overflow corrigido, body bg fixo' },
   { version: 'v0.7.5', date: '21/04/2026', desc: 'Mobile redesign: bottom nav funcional, detecção de tela reativa, sem espaço em branco' },
   { version: 'v0.7.4', date: '20/04/2026', desc: 'Cenário isolado em arquivo próprio — fix definitivo de carregamento' },

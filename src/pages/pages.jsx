@@ -436,6 +436,7 @@ export function Settings() {
         age: profile.age, target_rf_pct: profile.target_rf_pct,
         target_fii_pct: profile.target_fii_pct, target_rv_pct: profile.target_rv_pct,
         dashboard_layout: profile.dashboard_layout,
+        nav_auto_hide: profile.nav_auto_hide ?? false,
       })
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -474,6 +475,20 @@ export function Settings() {
               }}>{l}</button>
             ))}
           </div>
+        </div>
+        <div>
+          <label style={{ fontSize: 11, color: 'var(--tx3)', display: 'block', marginBottom: 10, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Menu Mobile</label>
+          <div style={{ display: 'flex', gap: 10 }}>
+            {[[false, '📌 Sempre visível'], [true, '↕ Recolhe ao rolar']].map(([v, l]) => (
+              <button key={String(v)} onClick={() => upd('nav_auto_hide', v)} style={{
+                flex: 1, padding: 10, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
+                border: `2px solid ${(profile?.nav_auto_hide ?? false) === v ? 'var(--ac)' : 'var(--bd)'}`,
+                background: 'var(--bg3)', color: 'var(--tx)',
+                fontWeight: (profile?.nav_auto_hide ?? false) === v ? 800 : 400, fontSize: 12,
+              }}>{l}</button>
+            ))}
+          </div>
+          <p style={{ fontSize: 11, color: 'var(--tx3)', marginTop: 8 }}>Só afeta dispositivos móveis</p>
         </div>
       </Card>
 
