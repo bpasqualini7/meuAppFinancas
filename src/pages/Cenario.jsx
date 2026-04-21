@@ -15,6 +15,8 @@ export default function Cenario() {
   }, [])
 
   const selicReal = macro?.selic && macro?.ipca12 ? macro.selic - macro.ipca12 : null
+  const copomChanged = macro?.selicMetaChange && macro.selicMetaChange !== 0
+  const copomDate = macro?.selicMetaDate ? new Date(macro.selicMetaDate.split('/').reverse().join('-')).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric' }) : null
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -28,6 +30,27 @@ export default function Cenario() {
         {selicReal != null && <KPI label="Selic Real" value={`${fmt.num(selicReal, 2)}%`} sub="Selic − IPCA" color={selicReal > 4 ? 'var(--gr)' : 'var(--am)'} />}
         {macro?.dolar != null && <KPI label="Dólar" value={fmt.brl(macro.dolar)} sub="USD/BRL PTAX" />}
       </div>
+
+      {/* Decisão Copom */}
+      {copomChanged && (
+        <Card style={{
+          background: macro.selicMetaChange > 0 ? 'rgba(239,68,68,.05)' : 'rgba(34,197,94,.05)',
+          border: `1px solid ${macro.selicMetaChange > 0 ? 'rgba(239,68,68,.3)' : 'rgba(34,197,94,.3)'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 24 }}>{macro.selicMetaChange > 0 ? '📈' : '📉'}</span>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: 14, color: macro.selicMetaChange > 0 ? 'var(--rd)' : 'var(--gr)' }}>
+                Copom {macro.selicMetaChange > 0 ? 'elevou' : 'reduziu'} a Selic Meta em {Math.abs(macro.selicMetaChange).toFixed(2)}%
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>
+                De {macro.selicMetaPrev?.toFixed(2)}% → {macro.selicMeta?.toFixed(2)}% a.a.
+                {copomDate && ` · ${copomDate}`}
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Análise */}
       {selicReal != null && (

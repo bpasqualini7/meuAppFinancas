@@ -26,6 +26,26 @@ const NAV = [
   { id: 'settings',  icon: '⚙', label: 'Config.' },
 ]
 
+// Badge Copom — mostra variação da Selic Meta quando houve mudança recente
+function CopomBadge({ macro }) {
+  if (!macro?.selicMetaChange || macro.selicMetaChange === 0) return null
+  const up = macro.selicMetaChange > 0
+  const color = up ? '#ef4444' : '#22c55e'  // alta = ruim (vermelho), baixa = bom (verde)
+  const arrow = up ? '▲' : '▼'
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center',
+      fontSize: 9, fontWeight: 800, padding: '1px 5px',
+      borderRadius: 999, marginLeft: 4,
+      background: `${color}22`, color,
+      border: `1px solid ${color}44`,
+      whiteSpace: 'nowrap',
+    }}>
+      {arrow} {Math.abs(macro.selicMetaChange).toFixed(2)}%
+    </span>
+  )
+}
+
 const PAGES = {
   dashboard: Dashboard, portfolio: Portfolio, extrato: Extrato,
   c20a: C20A, watchlist: Watchlist, proventos: Proventos,
@@ -37,7 +57,7 @@ const BOTTOM_MAIN = ['dashboard', 'portfolio', 'extrato', 'proventos', 'settings
 const BOTTOM_MORE = ['c20a', 'watchlist', 'cenario', 'guia']
 
 function Layout() {
-  const { user, profile, loading } = useApp()
+  const { user, profile, loading, macro } = useApp()
   const [page, setPage] = useState('dashboard')
   const [collapsed, setCollapsed] = useState(false)
   const [isMobile, setIsMobile] = useState(window.innerWidth < 900)
@@ -140,6 +160,7 @@ function Layout() {
               }}>
                 <span style={{ fontSize: 14, width: collapsed ? 'auto' : 16, textAlign: 'center', flexShrink: 0 }}>{n.icon}</span>
                 {!collapsed && n.label}
+                {!collapsed && n.id === 'cenario' && <CopomBadge macro={macro} />}
               </button>
             ))}
           </div>
@@ -250,9 +271,18 @@ function Layout() {
               background: 'none', border: 'none', cursor: 'pointer',
               color: BOTTOM_MORE.includes(page) ? 'var(--ac)' : 'var(--tx3)',
               fontSize: 10, fontFamily: 'inherit', padding: '4px 8px', minWidth: 48,
+              position: 'relative',
             }}>
               <span style={{ fontSize: 20 }}>⋯</span>
               <span style={{ fontWeight: BOTTOM_MORE.includes(page) ? 700 : 400, fontSize: 9 }}>Mais</span>
+              {macro?.selicMetaChange !== 0 && macro?.selicMetaChange != null && (
+                <span style={{
+                  position: 'absolute', top: 2, right: 6,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: macro.selicMetaChange > 0 ? '#ef4444' : '#22c55e',
+                  border: '1px solid var(--bg2)',
+                }} />
+              )}
             </button>
           </nav>
         </>

@@ -83,8 +83,8 @@ export const fetchMacro = async () => {
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados/ultimos/12?formato=json').then(r => r.json()),
       // PTAX BRL/USD
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/1?formato=json').then(r => r.json()),
-      // Selic Meta (decisão Copom — série 432)
-      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/1?formato=json').then(r => r.json()),
+      // Selic Meta — últimas 2 decisões Copom (série 432) para detectar mudança
+      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/2?formato=json').then(r => r.json()),
       // CDI over diário (série 12)
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
       // Ibovespa via brapi (token obrigatório para índices — plano pago)
@@ -97,7 +97,11 @@ export const fetchMacro = async () => {
 
     const selicDiario = selicR.status === 'fulfilled' ? parseFloat(selicR.value?.[0]?.valor) : null
     const selic = selicDiario != null ? ((Math.pow(1 + selicDiario / 100, 252) - 1) * 100) : null
-    const selicMeta = selicMetaR.status === 'fulfilled' ? parseFloat(selicMetaR.value?.[0]?.valor) : null
+    const selicMetaArr = selicMetaR.status === 'fulfilled' ? selicMetaR.value : []
+    const selicMeta = selicMetaArr.length > 0 ? parseFloat(selicMetaArr[selicMetaArr.length - 1]?.valor) : null
+    const selicMetaPrev = selicMetaArr.length > 1 ? parseFloat(selicMetaArr[selicMetaArr.length - 2]?.valor) : null
+    const selicMetaChange = selicMeta != null && selicMetaPrev != null ? +(selicMeta - selicMetaPrev).toFixed(2) : 0
+    const selicMetaDate = selicMetaArr.length > 0 ? selicMetaArr[selicMetaArr.length - 1]?.data : null
     const cdiDiario = cdiR.status === 'fulfilled' ? parseFloat(cdiR.value?.[0]?.valor) : null
     // CDI anualizado: (1 + taxa_diaria/100)^252 - 1
     const cdi = cdiDiario != null ? ((Math.pow(1 + cdiDiario / 100, 252) - 1) * 100) : null
@@ -125,7 +129,7 @@ export const fetchMacro = async () => {
     } : null
 
     return cached('__macro__', {
-      selic, selicMeta, cdi, ipca12, dolar,
+      selic, selicMeta, selicMetaPrev, selicMetaChange, selicMetaDate, cdi, ipca12, dolar,
       ibov, sp500, btc,
       updatedAt: new Date().toISOString(),
     })
