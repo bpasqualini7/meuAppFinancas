@@ -28,8 +28,10 @@ export default function Realizados() {
   })
 
   const totalPnl = positions.reduce((s, p) => s + p.realized_pnl, 0)
-  const wins = positions.filter(p => p.realized_pnl > 0).length
-  const losses = positions.filter(p => p.realized_pnl < 0).length
+  const total_realized = positions.filter(p => p.realization_status === 'total')
+  const partial_realized = positions.filter(p => p.realization_status === 'partial')
+  const wins = total_realized.filter(p => p.realized_pnl > 0).length
+  const losses = total_realized.filter(p => p.realized_pnl < 0).length
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -40,7 +42,9 @@ export default function Realizados() {
           <Card>
             <div style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700, marginBottom: 6 }}>Resultado Total</div>
             <div style={{ fontSize: 22, fontWeight: 800, color: totalPnl >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.brl(totalPnl)}</div>
-            <div style={{ fontSize: 11, color: 'var(--tx3)', marginTop: 4 }}>{positions.length} ativo{positions.length !== 1 ? 's' : ''} realizado{positions.length !== 1 ? 's' : ''}</div>
+            <div style={{ fontSize: 11, color: 'var(--tx3)', marginTop: 4 }}>
+              {total_realized.length} total · {partial_realized.length} parcial
+            </div>
           </Card>
           <Card>
             <div style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '.06em', fontWeight: 700, marginBottom: 6 }}>Lucros / Prejuízos</div>
@@ -89,7 +93,7 @@ export default function Realizados() {
             const isProfit = p.realized_pnl >= 0
             const pnlPct = p.total_cost > 0 ? (p.realized_pnl / p.total_cost) * 100 : 0
             return (
-              <Card key={p.asset_id} style={{ borderLeft: `4px solid ${isProfit ? 'var(--gr)' : 'var(--rd)'}` }}>
+              <Card key={p.asset_id} style={{ borderLeft: `4px solid ${p.realization_status === 'partial' ? 'var(--am)' : isProfit ? 'var(--gr)' : 'var(--rd)'}` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
                   {/* Info do ativo */}
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -101,10 +105,16 @@ export default function Realizados() {
                       <span style={{
                         display: 'inline-flex', alignItems: 'center', padding: '2px 8px',
                         borderRadius: 999, fontSize: 10, fontWeight: 700,
-                        background: isProfit ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)',
-                        color: isProfit ? 'var(--gr)' : 'var(--rd)',
+                        background: p.realization_status === 'partial' 
+                          ? 'rgba(245,158,11,.15)'
+                          : isProfit ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)',
+                        color: p.realization_status === 'partial'
+                          ? 'var(--am)'
+                          : isProfit ? 'var(--gr)' : 'var(--rd)',
                       }}>
-                        {isProfit ? '✓ Realizado com lucro' : '✗ Realizado com prejuízo'}
+                        {p.realization_status === 'partial'
+                          ? `◑ Parcial — ${fmt.num(p.remaining_qty, 0)} cota${p.remaining_qty !== 1 ? 's' : ''} em carteira`
+                          : isProfit ? '✓ Realizado com lucro' : '✗ Realizado com prejuízo'}
                       </span>
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 10 }}>
@@ -116,11 +126,12 @@ export default function Realizados() {
                       {[
                         ['Qtd comprada', fmt.num(p.total_bought, 0)],
                         ['Qtd vendida', fmt.num(p.total_sold, 0)],
+                        p.realization_status === 'partial' && ['Em carteira', fmt.num(p.remaining_qty, 0)],
                         ['PM compra', fmt.brl(p.avg_buy_price)],
                         ['PM venda', fmt.brl(p.avg_sell_price)],
                         ['Custo total', fmt.brl(p.total_cost)],
                         ['Receita total', fmt.brl(p.total_revenue)],
-                      ].map(([label, value]) => (
+                      ].filter(Boolean).map(([label, value]) => (
                         <div key={label} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '8px 10px' }}>
                           <div style={{ fontSize: 9, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 3 }}>{label}</div>
                           <div style={{ fontSize: 13, fontWeight: 700 }}>{value}</div>
