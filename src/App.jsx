@@ -59,6 +59,7 @@ function Layout() {
     Object.entries(vars).forEach(([k, v]) => root.style.setProperty(k, v))
     document.body.style.fontSize = fontSize + 'px'
     document.body.style.background = vars['--bg']
+    document.body.style.minHeight = '100vh'
   }, [theme, fontSize])
 
   if (loading) return (

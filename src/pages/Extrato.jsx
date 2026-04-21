@@ -282,13 +282,13 @@ export default function Extrato({ onNavigate }) {
 
       {/* Filtros + Ordenação */}
       <Card style={{ padding: '12px 16px' }}>
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
           {/* Busca por ticker */}
           <input
             value={filterTicker}
             onChange={e => setFilterTicker(e.target.value)}
             placeholder="Filtrar por ativo..."
-            style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit', width: 160 }}
+            style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit', flex: '1 1 140px', minWidth: 0 }}
           />
 
           {/* Tipo */}

@@ -259,7 +259,7 @@ export function Proventos() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
         <KPI label={`Total ${year}`} value={fmt.brl(totalYear)} sub="Proventos recebidos" color="var(--gr)" />
         <KPI label="Saldo Disponível" value={fmt.brl(saldo)} sub="Para reinvestir" color="var(--am)" />
         <KPI label="Média Mensal" value={fmt.brl(totalYear / (new Date().getMonth() + 1))} sub={`Jan–${new Date().toLocaleString('pt-BR', { month: 'short' })} ${year}`} />
@@ -482,7 +482,7 @@ export function Settings() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <Input label="Sua Idade" type="number" value={profile?.age || ''} onChange={e => upd('age', parseInt(e.target.value))} placeholder="Ex: 35" />
           <p style={{ fontSize: 11, color: 'var(--tx3)', marginTop: -8 }}>Usada para calcular o balanceamento ideal por idade</p>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))', gap: 10 }}>
             <Input label="Meta RF %" type="number" value={profile?.target_rf_pct || ''} onChange={e => upd('target_rf_pct', parseFloat(e.target.value))} />
             <Input label="Meta FII %" type="number" value={profile?.target_fii_pct || ''} onChange={e => upd('target_fii_pct', parseFloat(e.target.value))} />
             <Input label="Meta RV %" type="number" value={profile?.target_rv_pct || ''} onChange={e => upd('target_rv_pct', parseFloat(e.target.value))} />

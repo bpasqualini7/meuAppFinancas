@@ -97,20 +97,21 @@ function MacroStrip({ macro }) {
       <div style={{
         display: 'flex',
         overflowX: 'auto',
-        padding: '10px 10px 12px',
+        padding: '10px 6px 12px',
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
+        WebkitOverflowScrolling: 'touch',
       }}>
         {indicators.map((ind, i) => (
           <div key={ind.key} style={{ display: 'flex', flexShrink: 0, alignItems: 'center' }}>
-            <div style={{ padding: '8px 16px', minWidth: 108, textAlign: 'center' }}>
+            <div style={{ padding: '8px 10px', minWidth: 88, textAlign: 'center' }}>
               <div style={{
                 fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase',
                 letterSpacing: '0.07em', fontWeight: 700, marginBottom: 4,
               }}>
                 {ind.label}
               </div>
-              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--tx)', lineHeight: 1, marginBottom: ind.sub ? 3 : 0 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--tx)', lineHeight: 1, marginBottom: ind.sub ? 3 : 0 }}>
                 {ind.value}
               </div>
               {ind.sub && (
@@ -174,7 +175,7 @@ export default function Dashboard() {
       <MacroStrip macro={macro} />
 
       {/* ── KPIs ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
         <KPI label="Patrimônio Total" value={fmt.brl(totalP)} sub={`Custo: ${fmt.brl(totalC)}`} />
         <KPI label="Retorno" value={fmt.brl(ret)} sub={fmt.pct(retPct)} color={ret >= 0 ? 'var(--gr)' : 'var(--rd)'} />
         <KPI label="Dividendos/mês" value={fmt.brl(monthly)} sub="Estimado ano corrente" />
@@ -183,7 +184,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Allocation + Balance ── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
         <Card>
           <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Alocação por Classe</div>
           <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
@@ -224,7 +225,7 @@ export default function Dashboard() {
       {portfolio.length > 0 && (
         <Card>
           <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Posições em Destaque</div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 10 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
             {portfolio.slice(0, 6).map(a => {
               const p = prices[a.ticker]
               const price = p?.price || a.avg_price
