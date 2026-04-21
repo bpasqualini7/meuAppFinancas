@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Spinner, Empty, Input, KPI } from '../components/ui'
-import { insertDividend, addToWatchlist, updateProfile } from '../lib/supabase'
+import { insertDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A } from '../lib/supabase'
 
 export function Portfolio() {
   const { portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
@@ -99,8 +99,27 @@ export function Portfolio() {
 }
 
 export function C20A() {
-  const { portfolio, prices } = useApp()
-  const c20a = portfolio.filter(a => a.is_c20a)
+  const { user, portfolio, prices, refreshPortfolio } = useApp()
+  const c20a = portfolio.filter(a => a.c20a_included)
+  const available = portfolio.filter(a => !a.c20a_included)
+  const [showAdd, setShowAdd] = useState(false)
+  const [saving, setSaving] = useState(null)
+
+  const handleAdd = async (asset) => {
+    setSaving(asset.asset_id)
+    try {
+      await addToC20A(user.id, asset.asset_id)
+      await refreshPortfolio()
+    } finally { setSaving(null); setShowAdd(false) }
+  }
+
+  const handleRemove = async (asset) => {
+    setSaving(asset.asset_id)
+    try {
+      await removeFromC20A(user.id, asset.asset_id)
+      await refreshPortfolio()
+    } finally { setSaving(null) }
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -110,31 +129,78 @@ export function C20A() {
             <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0 }}>Carteira C20A ⭐</h2>
             <p style={{ fontSize: 13, color: 'var(--tx2)', margin: '4px 0 0' }}>Meta: R$500–R$1.000/mês por ativo na aposentadoria</p>
           </div>
-          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--ac)' }}>{c20a.length}<span style={{ fontSize: 16, color: 'var(--tx3)' }}>/20</span></div>
+          <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--ac)' }}>
+            {c20a.length}<span style={{ fontSize: 16, color: 'var(--tx3)' }}>/20</span>
+          </div>
         </div>
       </Card>
 
+      {/* Botão adicionar */}
+      {available.length > 0 && c20a.length < 20 && (
+        <div>
+          <Btn onClick={() => setShowAdd(s => !s)} color={showAdd ? 'ghost' : 'accent'}>
+            {showAdd ? 'Cancelar' : '+ Adicionar ativo à C20A'}
+          </Btn>
+          {showAdd && (
+            <Card style={{ marginTop: 10 }}>
+              <div style={{ fontSize: 12, color: 'var(--tx3)', marginBottom: 10, fontWeight: 700 }}>
+                ATIVOS DA CARTEIRA DISPONÍVEIS
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {available.map(a => (
+                  <div key={a.asset_id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--bg3)', borderRadius: 9 }}>
+                    <div>
+                      <span style={{ fontWeight: 800 }}>{a.ticker}</span>
+                      <span style={{ fontSize: 11, color: 'var(--tx3)', marginLeft: 8 }}>{a.name}</span>
+                    </div>
+                    <Btn size="sm" color="accent" onClick={() => handleAdd(a)} disabled={saving === a.asset_id}>
+                      {saving === a.asset_id ? '...' : '+ Adicionar'}
+                    </Btn>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          )}
+        </div>
+      )}
+
+      {/* Grid C20A */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
         {c20a.map(a => {
-          const price = prices[a.ticker]?.price || a.avg_price
+          const p = prices[a.ticker]
+          const price = p?.price || a.avg_price
           const monthly = (a.estimated_monthly_dividend_per_share || 0) * a.quantity
-          const mid = (a.c20a_target_min + a.c20a_target_max) / 2
-          const tq = a.estimated_monthly_dividend_per_share > 0 ? Math.ceil(mid / a.estimated_monthly_dividend_per_share) : null
+          const targetMin = a.c20a_target_min || 500
+          const targetMax = a.c20a_target_max || 1000
+          const mid = (targetMin + targetMax) / 2
+          const tq = a.estimated_monthly_dividend_per_share > 0
+            ? Math.ceil(mid / a.estimated_monthly_dividend_per_share)
+            : null
           const prog = tq ? Math.min((a.quantity / tq) * 100, 100) : 0
-          const ok = monthly >= a.c20a_target_min
+          const ok = monthly >= targetMin
           const magic = getMagicNumber(price, a.estimated_monthly_dividend_per_share)
           return (
             <Card key={a.asset_id}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div><div style={{ fontWeight: 800, fontSize: 16 }}>{a.ticker}</div><div style={{ fontSize: 11, color: 'var(--tx3)' }}>{a.name}</div></div>
-                {ok && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(34,197,94,.15)', color: 'var(--gr)' }}>✓ Meta</span>}
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 16 }}>{a.ticker}</div>
+                  <div style={{ fontSize: 11, color: 'var(--tx3)' }}>{a.name}</div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  {ok && <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 999, background: 'rgba(34,197,94,.15)', color: 'var(--gr)' }}>✓ Meta</span>}
+                  <button onClick={() => handleRemove(a)} disabled={saving === a.asset_id} style={{ background: 'none', border: 'none', color: 'var(--tx3)', cursor: 'pointer', fontSize: 14, padding: '2px 4px' }} title="Remover da C20A">✕</button>
+                </div>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-                {[['Tenho', fmt.num(a.quantity, 0), 'cotas'], ['Meta', tq ? fmt.num(tq, 0) : '—', 'cotas'], ['Renda/mês', fmt.brl(monthly), ''], ['Alvo', `${fmt.brl(a.c20a_target_min)}–${fmt.brl(a.c20a_target_max)}`, '']].map(([l, v, s]) => (
+                {[
+                  ['Tenho', fmt.num(a.quantity, 0) + ' cotas'],
+                  ['Meta', tq ? fmt.num(tq, 0) + ' cotas' : '—'],
+                  ['Renda/mês', fmt.brl(monthly)],
+                  ['Alvo', `${fmt.brl(targetMin)}–${fmt.brl(targetMax)}`],
+                ].map(([l, v]) => (
                   <div key={l} style={{ background: 'var(--bg3)', borderRadius: 8, padding: '7px 10px' }}>
                     <div style={{ fontSize: 9, color: 'var(--tx3)' }}>{l}</div>
-                    <div style={{ fontWeight: 800, fontSize: 15, color: l === 'Meta' ? 'var(--ac)' : l === 'Renda/mês' && ok ? 'var(--gr)' : 'var(--tx)' }}>{v}</div>
-                    {s && <div style={{ fontSize: 9, color: 'var(--tx2)' }}>{s}</div>}
+                    <div style={{ fontWeight: 800, fontSize: 13, color: l === 'Renda/mês' && ok ? 'var(--gr)' : 'var(--tx)' }}>{v}</div>
                   </div>
                 ))}
               </div>
@@ -154,9 +220,16 @@ export function C20A() {
             </Card>
           )
         })}
-        {Array.from({ length: 20 - c20a.length }).map((_, i) => (
-          <div key={i} style={{ border: '2px dashed var(--bd)', borderRadius: 14, display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 160, color: 'var(--tx3)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            + Adicionar
+
+        {/* Slots vazios */}
+        {Array.from({ length: Math.max(0, 20 - c20a.length) }).map((_, i) => (
+          <div key={i} onClick={() => setShowAdd(true)} style={{
+            border: '2px dashed var(--bd)', borderRadius: 14,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            minHeight: 140, color: 'var(--tx3)', fontSize: 13, fontWeight: 600,
+            cursor: 'pointer', transition: 'border-color .15s',
+          }}>
+            + Vaga disponível
           </div>
         ))}
       </div>

@@ -242,6 +242,26 @@ export const updateProfile = async (userId, payload) => {
   return data
 }
 
+// ── C20A ─────────────────────────────────────────────────
+export const addToC20A = async (userId, assetId, targetMin = 500, targetMax = 1000) => {
+  const { data, error } = await supabase
+    .from('c20a_assets')
+    .upsert({ user_id: userId, asset_id: assetId, target_min: targetMin, target_max: targetMax },
+      { onConflict: 'user_id,asset_id' })
+    .select()
+  if (error) throw error
+  return data
+}
+
+export const removeFromC20A = async (userId, assetId) => {
+  const { error } = await supabase
+    .from('c20a_assets')
+    .delete()
+    .eq('user_id', userId)
+    .eq('asset_id', assetId)
+  if (error) throw error
+}
+
 // ── Realized positions ───────────────────────────────────
 export const getRealizedPositions = async (userId) => {
   const { data, error } = await supabase
