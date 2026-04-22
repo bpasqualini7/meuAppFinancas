@@ -3,6 +3,10 @@
 const BRAPI_TOKEN = import.meta.env.VITE_BRAPI_TOKEN || ''
 const brapiUrl = (path) => `https://brapi.dev/api${path}${path.includes('?') ? '&' : '?'}token=${BRAPI_TOKEN}`
 
+const BOLSAI_TOKEN = import.meta.env.VITE_BOLSAI_TOKEN || ''
+const bolsaiUrl = (path) => `https://api.usebolsai.com/api/v1${path}`
+const bolsaiHeaders = { 'X-API-Key': BOLSAI_TOKEN }
+
 const CACHE = {}
 const TTL = 15 * 60 * 1000 // 15 min
 
@@ -15,14 +19,54 @@ const fromCache = (key) => {
   return c && Date.now() - c.ts < TTL ? c.data : null
 }
 
-// Fetch BR stock / FII via brapi.dev (free, no key needed)
+// Fetch BR stock / FII via BolsaI (primário) com fallback para brapi
 export const fetchBR = async (ticker) => {
   const hit = fromCache(ticker)
   if (hit) return hit
   try {
-    const r = await fetch(
-      brapiUrl(`/quote/${ticker}?fundamental=true&range=1d&interval=1d`)
-    )
+    // Tentar BolsaI primeiro
+    const [quoteR, statsR] = await Promise.allSettled([
+      fetch(bolsaiUrl(`/stocks/${ticker}/quote`), { headers: bolsaiHeaders }).then(r => r.json()),
+      fetch(bolsaiUrl(`/stocks/${ticker}/stats`), { headers: bolsaiHeaders }).then(r => r.json()),
+    ])
+
+    const q = quoteR.status === 'fulfilled' && quoteR.value?.ticker ? quoteR.value : null
+    const s = statsR.status === 'fulfilled' && statsR.value?.ticker ? statsR.value : null
+
+    if (q) {
+      // Buscar fundamentais separado (FIIs têm endpoint próprio)
+      let pl = null, pvp = null, dy = null
+      try {
+        // Tentar como FII primeiro
+        const fiiR = await fetch(bolsaiUrl(`/fiis/${ticker}`), { headers: bolsaiHeaders })
+        if (fiiR.ok) {
+          const fii = await fiiR.json()
+          if (fii?.ticker) { pvp = fii.pvp; dy = fii.dividend_yield_ttm }
+        } else {
+          // Tentar como ação
+          const fundR = await fetch(bolsaiUrl(`/fundamentals/${ticker}`), { headers: bolsaiHeaders })
+          if (fundR.ok) {
+            const fund = await fundR.json()
+            if (fund?.ticker) { pl = fund.pl; pvp = fund.pvp; dy = fund.dividend_yield_ttm }
+          }
+        }
+      } catch { /* ignora erro em fundamentais */ }
+
+      return cached(ticker, {
+        price: q.close,
+        change_pct: s?.daily_change_pct || 0,
+        pl, pvp, dy,
+        ma200: null,
+        high52: s?.week_52_high || null,
+        low52: s?.week_52_low || null,
+        source: 'bolsai',
+      })
+    }
+  } catch { /* fallback para brapi */ }
+
+  // Fallback: brapi
+  try {
+    const r = await fetch(brapiUrl(`/quote/${ticker}?fundamental=true&range=1d&interval=1d`))
     const d = await r.json()
     const q = d.results?.[0]
     if (!q) return null

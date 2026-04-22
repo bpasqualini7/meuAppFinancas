@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 7,
-  patch: 11,
+  patch: 12,
   date: '2026-04-20',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.7.12', date: '21/04/2026', desc: 'BolsaI integrado como fonte primária de preços BR (ações, FIIs, fundamentais), brapi como fallback' },
   { version: 'v0.7.11', date: '21/04/2026', desc: 'C20A: tabela própria, adicionar/remover ativos, progresso de meta, slots clicáveis' },
   { version: 'v0.7.10', date: '21/04/2026', desc: 'Realizados: suporte a realizações parciais com tag âmbar e métricas de saldo em carteira' },
   { version: 'v0.7.9', date: '21/04/2026', desc: 'Item 4: seção Realizados com P&L, métricas e tags verde/vermelho' },
