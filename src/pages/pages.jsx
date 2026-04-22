@@ -133,6 +133,7 @@ export function Portfolio() {
                     </tr>
                   )}
                   </React.Fragment>
+                )
               })}
             </tbody>
           </table>
