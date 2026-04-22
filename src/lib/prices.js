@@ -135,7 +135,9 @@ export const fetchNews = async () => {
 
 // Auto-detect asset type and fetch accordingly
 export const fetchPrice = async (ticker, assetClass) => {
+  if (!ticker) return null
   if (assetClass === 'crypto') return fetchCrypto(ticker)
+  // AAPL, MSFT etc sem sufixo → tentar como ação US via proxy também
   return fetchBR(ticker)
 }
 
