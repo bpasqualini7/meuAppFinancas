@@ -10,6 +10,7 @@ import Proventos from './pages/Proventos'
 import Cenario from './pages/Cenario'
 import Realizados from './pages/Realizados'
 import Calendario from './pages/Calendario'
+import ImportarNota from './pages/ImportarNota'
 import Guia from './pages/Guia'
 import Settings from './pages/Settings'
 import { Spinner } from './components/ui'
@@ -53,12 +54,12 @@ function CopomBadge({ macro }) {
 const PAGES = {
   dashboard: Dashboard, portfolio: Portfolio, extrato: Extrato, realizados: Realizados, calendario: Calendario,
   c20a: C20A, watchlist: Watchlist, proventos: Proventos,
-  cenario: Cenario, guia: Guia, settings: Settings,
+  cenario: Cenario, guia: Guia, settings: Settings, importar: ImportarNota,
 }
 
 // Bottom nav principal (5 itens) + "Mais" para o resto
 const BOTTOM_MAIN = ['dashboard', 'portfolio', 'extrato', 'realizados', 'settings']
-const BOTTOM_MORE = ['c20a', 'watchlist', 'calendario', 'proventos', 'cenario', 'guia']
+const BOTTOM_MORE = ['c20a', 'watchlist', 'calendario', 'proventos', 'cenario', 'guia', 'importar']
 
 function Layout() {
   const { user, profile, loading, macro } = useApp()

@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 7,
-  patch: 16,
+  patch: 17,
   date: '2026-04-20',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.7.17', date: '22/04/2026', desc: 'Item 8: Parser PDF nota Inter — importação automática de operações, review antes de confirmar' },
   { version: 'v0.7.16', date: '21/04/2026', desc: 'Item 7: drag-and-drop no Dashboard — reordenar blocos, persistido no localStorage' },
   { version: 'v0.7.15', date: '21/04/2026', desc: 'Item 5: Calendário do Extrato — grade mensal + linha do tempo, modal de detalhe por dia' },
   { version: 'v0.7.14', date: '21/04/2026', desc: 'Carteira: linha expansível com detalhes. Watchlist: modal com indicadores, score e análise' },
