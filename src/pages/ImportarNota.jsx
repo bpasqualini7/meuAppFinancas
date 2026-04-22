@@ -126,12 +126,15 @@ export default function ImportarNota({ onNavigate }) {
     setError(null)
     try {
       const fullText = await extractTextFromPDF(file)
-      console.log('=== TEXTO EXTRAÍDO ===')
-      console.log(fullText.substring(0, 2000))
-      console.log('=== FIM ===')
 
       const { ops: parsed, pregaoDate: date } = parseInterNota(fullText)
-      console.log('Operações parseadas:', parsed)
+
+      // Debug — mostrar texto bruto se nenhuma op encontrada
+      if (parsed.length === 0) {
+        setError('Nenhuma operação encontrada. Texto extraído (primeiros 500 chars):\n\n' + fullText.substring(0, 500))
+        setLoading(false)
+        return
+      }
       if (parsed.length === 0) {
         setError('Nenhuma operação encontrada. Verifique se é uma nota do Inter. Tente abrir o PDF no Chrome do computador.')
         setLoading(false)
