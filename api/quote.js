@@ -21,9 +21,26 @@ export default async function handler(req, res) {
   try {
     // Tentar BolsaI primeiro
     if (type === 'quote') {
-      // Tentar o ticker direto e sem sufixo numérico (ex: MXRF11 → MXRF)
-      const tickerBase = ticker.replace(/\d+$/, '')
-      
+      const tickerBase = ticker.replace(/\d+$/, '') // ex: MXRF11 → MXRF
+
+      // 1. Tentar como FII direto (endpoint /fiis/ da BolsaI aceita com ou sem sufixo)
+      const fiiRes = await fetch(`${BASE}/fiis/${ticker}`, { headers })
+      if (fiiRes.ok) {
+        const fii = await fiiRes.json()
+        if (fii?.ticker && fii.close_price) {
+          return res.status(200).json({
+            price: fii.close_price,
+            change_pct: 0,
+            pl: null,
+            pvp: fii.pvp || null,
+            dy: fii.dividend_yield_ttm || null,
+            high52: null, low52: null,
+            source: 'bolsai_fii',
+          })
+        }
+      }
+
+      // 2. Tentar como ação (/stocks/)
       const [qRes, sRes] = await Promise.allSettled([
         fetch(`${BASE}/stocks/${ticker}/quote`, { headers }),
         fetch(`${BASE}/stocks/${ticker}/stats`, { headers }),
@@ -32,28 +49,14 @@ export default async function handler(req, res) {
       const s = sRes.status === 'fulfilled' && sRes.value.ok ? await sRes.value.json() : null
 
       if (q?.ticker) {
-        // Buscar fundamentais — tentar FII primeiro, depois ação
         let pl = null, pvp = null, dy = null
         try {
-          const fiiRes = await fetch(`${BASE}/fiis/${ticker}`, { headers })
-          if (fiiRes.ok) {
-            const fii = await fiiRes.json()
-            if (fii?.ticker) { pvp = fii.pvp; dy = fii.dividend_yield_ttm }
-          } else {
-            // Tentar sem sufixo (ex: MXRF)
-            const fiiRes2 = await fetch(`${BASE}/fiis/${tickerBase}`, { headers })
-            if (fiiRes2.ok) {
-              const fii2 = await fiiRes2.json()
-              if (fii2?.ticker) { pvp = fii2.pvp; dy = fii2.dividend_yield_ttm }
-            } else {
-              const fundRes = await fetch(`${BASE}/fundamentals/${ticker}`, { headers })
-              if (fundRes.ok) {
-                const fund = await fundRes.json()
-                if (fund?.ticker) { pl = fund.pl; pvp = fund.pvp; dy = fund.dividend_yield_ttm }
-              }
-            }
+          const fundRes = await fetch(`${BASE}/fundamentals/${ticker}`, { headers })
+          if (fundRes.ok) {
+            const fund = await fundRes.json()
+            if (fund?.ticker) { pl = fund.pl; pvp = fund.pvp; dy = fund.dividend_yield_ttm }
           }
-        } catch { /* ignora erro em fundamentais */ }
+        } catch { }
 
         return res.status(200).json({
           price: q.close,
@@ -63,6 +66,22 @@ export default async function handler(req, res) {
           low52: s?.week_52_low || null,
           source: 'bolsai',
         })
+      }
+
+      // 3. Tentar sem sufixo (MXRF em vez de MXRF11)
+      if (tickerBase !== ticker) {
+        const fiiRes2 = await fetch(`${BASE}/fiis/${tickerBase}`, { headers })
+        if (fiiRes2.ok) {
+          const fii2 = await fiiRes2.json()
+          if (fii2?.ticker && fii2.close_price) {
+            return res.status(200).json({
+              price: fii2.close_price,
+              change_pct: 0,
+              pl: null, pvp: fii2.pvp || null, dy: fii2.dividend_yield_ttm || null,
+              high52: null, low52: null, source: 'bolsai_fii',
+            })
+          }
+        }
       }
     }
 
