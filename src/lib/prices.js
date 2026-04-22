@@ -19,68 +19,16 @@ const fromCache = (key) => {
   return c && Date.now() - c.ts < TTL ? c.data : null
 }
 
-// Fetch BR stock / FII via BolsaI (primário) com fallback para brapi
+// Fetch BR stock / FII via proxy Vercel (/api/quote)
 export const fetchBR = async (ticker) => {
   const hit = fromCache(ticker)
   if (hit) return hit
   try {
-    // Tentar BolsaI primeiro
-    const [quoteR, statsR] = await Promise.allSettled([
-      fetch(bolsaiUrl(`/stocks/${ticker}/quote`), { headers: bolsaiHeaders }).then(r => r.json()),
-      fetch(bolsaiUrl(`/stocks/${ticker}/stats`), { headers: bolsaiHeaders }).then(r => r.json()),
-    ])
-
-    const q = quoteR.status === 'fulfilled' && quoteR.value?.ticker ? quoteR.value : null
-    const s = statsR.status === 'fulfilled' && statsR.value?.ticker ? statsR.value : null
-
-    if (q) {
-      // Buscar fundamentais separado (FIIs têm endpoint próprio)
-      let pl = null, pvp = null, dy = null
-      try {
-        // Tentar como FII primeiro
-        const fiiR = await fetch(bolsaiUrl(`/fiis/${ticker}`), { headers: bolsaiHeaders })
-        if (fiiR.ok) {
-          const fii = await fiiR.json()
-          if (fii?.ticker) { pvp = fii.pvp; dy = fii.dividend_yield_ttm }
-        } else {
-          // Tentar como ação
-          const fundR = await fetch(bolsaiUrl(`/fundamentals/${ticker}`), { headers: bolsaiHeaders })
-          if (fundR.ok) {
-            const fund = await fundR.json()
-            if (fund?.ticker) { pl = fund.pl; pvp = fund.pvp; dy = fund.dividend_yield_ttm }
-          }
-        }
-      } catch { /* ignora erro em fundamentais */ }
-
-      return cached(ticker, {
-        price: q.close,
-        change_pct: s?.daily_change_pct || 0,
-        pl, pvp, dy,
-        ma200: null,
-        high52: s?.week_52_high || null,
-        low52: s?.week_52_low || null,
-        source: 'bolsai',
-      })
-    }
-  } catch { /* fallback para brapi */ }
-
-  // Fallback: brapi
-  try {
-    const r = await fetch(brapiUrl(`/quote/${ticker}?fundamental=true&range=1d&interval=1d`))
+    const r = await fetch(`/api/quote?ticker=${ticker}`)
+    if (!r.ok) return null
     const d = await r.json()
-    const q = d.results?.[0]
-    if (!q) return null
-    return cached(ticker, {
-      price: q.regularMarketPrice,
-      change_pct: q.regularMarketChangePercent,
-      pl: q.priceEarnings,
-      pvp: q.priceToBook,
-      dy: q.dividendYield,
-      ma200: q.twoHundredDayAverage,
-      high52: q.fiftyTwoWeekHigh,
-      low52: q.fiftyTwoWeekLow,
-      source: 'brapi',
-    })
+    if (!d.price) return null
+    return cached(ticker, d)
   } catch {
     return null
   }
@@ -115,72 +63,20 @@ export const fetchCrypto = async (ticker) => {
   }
 }
 
-// Fetch macro data from BCB (Banco Central do Brasil) + brapi (índices) + CoinGecko (BTC)
+// Fetch macro via proxy Vercel (/api/macro)
 export const fetchMacro = async () => {
   const hit = fromCache('__macro__')
   if (hit) return hit
   try {
-    const [selicR, ipcaR, dolarR, selicMetaR, cdiR, ibovR, spR, btcR] = await Promise.allSettled([
-      // Selic over (taxa efetiva diária acumulada mensal → % a.a.)
-      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.11/dados/ultimos/1?formato=json').then(r => r.json()),
-      // IPCA mensal — últimos 12 meses
-      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.433/dados/ultimos/12?formato=json').then(r => r.json()),
-      // PTAX BRL/USD
-      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/1?formato=json').then(r => r.json()),
-      // Selic Meta — últimas 2 decisões Copom (série 432) para detectar mudança
-      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/2?formato=json').then(r => r.json()),
-      // CDI over diário (série 12)
-      fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
-      // Ibovespa via brapi (token obrigatório para índices — plano pago)
-      brapiUrl('/quote/%5EBVSP?range=1d&interval=1d') ? fetch(brapiUrl('/quote/%5EBVSP?range=1d&interval=1d')).then(r => r.json()).catch(() => null) : Promise.resolve(null),
-      // S&P500 via brapi (plano pago)
-      fetch(brapiUrl('/quote/%5EGSPC?range=1d&interval=1d')).then(r => r.json()).catch(() => null),
-      // BTC/BRL via CoinGecko
-      fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true', {headers:{'Accept':'application/json'}}).then(r => r.json()),
-    ])
-
-    const selicDiario = selicR.status === 'fulfilled' ? parseFloat(selicR.value?.[0]?.valor) : null
-    const selic = selicDiario != null ? ((Math.pow(1 + selicDiario / 100, 252) - 1) * 100) : null
-    const selicMetaArr = selicMetaR.status === 'fulfilled' ? selicMetaR.value : []
-    const selicMeta = selicMetaArr.length > 0 ? parseFloat(selicMetaArr[selicMetaArr.length - 1]?.valor) : null
-    const selicMetaPrev = selicMetaArr.length > 1 ? parseFloat(selicMetaArr[selicMetaArr.length - 2]?.valor) : null
-    const selicMetaChange = selicMeta != null && selicMetaPrev != null ? +(selicMeta - selicMetaPrev).toFixed(2) : 0
-    const selicMetaDate = selicMetaArr.length > 0 ? selicMetaArr[selicMetaArr.length - 1]?.data : null
-    const cdiDiario = cdiR.status === 'fulfilled' ? parseFloat(cdiR.value?.[0]?.valor) : null
-    // CDI anualizado: (1 + taxa_diaria/100)^252 - 1
-    const cdi = cdiDiario != null ? ((Math.pow(1 + cdiDiario / 100, 252) - 1) * 100) : null
-
-    const ipcaArr = ipcaR.status === 'fulfilled' ? ipcaR.value : []
-    const ipca12 = ipcaArr.reduce((s, i) => s + parseFloat(i.valor || 0), 0)
-
-    const dolar = dolarR.status === 'fulfilled' ? parseFloat(dolarR.value?.[0]?.valor) : null
-
-    const parseBrapi = (r) => {
-      try {
-        const q = r?.results?.[0]
-        if (!q || q.error) return null
-        return { price: q.regularMarketPrice, change_pct: q.regularMarketChangePercent }
-      } catch { return null }
-    }
-    const ibov = ibovR.status === 'fulfilled' ? parseBrapi(ibovR.value) : null
-    const sp500 = spR.status === 'fulfilled' ? parseBrapi(spR.value) : null
-
-    const btcData = btcR.status === 'fulfilled' ? btcR.value?.bitcoin : null
-    const btc = btcData ? {
-      price_brl: btcData.brl,
-      price_usd: btcData.usd,
-      change_pct: btcData.brl_24h_change,
-    } : null
-
-    return cached('__macro__', {
-      selic, selicMeta, selicMetaPrev, selicMetaChange, selicMetaDate, cdi, ipca12, dolar,
-      ibov, sp500, btc,
-      updatedAt: new Date().toISOString(),
-    })
+    const r = await fetch('/api/macro')
+    if (!r.ok) return null
+    const d = await r.json()
+    return cached('__macro__', d)
   } catch {
     return null
   }
 }
+
 
 // Fetch news via RSS (InfoMoney → CORS proxy)
 // Feeds RSS do Banco Central do Brasil
