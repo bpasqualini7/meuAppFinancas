@@ -1,5 +1,6 @@
 // ── PORTFOLIO ─────────────────────────────────────────────
 import { useState, useEffect } from 'react'
+import React from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Spinner, Empty, Input, KPI } from '../components/ui'
 import { insertDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A } from '../lib/supabase'
@@ -50,7 +51,8 @@ export function Portfolio() {
                 const saldo = balances[a.ticker] || 0
                 const isExpanded = expandedTicker === a.ticker
                 return (
-                  <tr key={a.asset_id}
+                  <React.Fragment key={a.asset_id}>
+                  <tr
                     onClick={() => setExpandedTicker(isExpanded ? null : a.ticker)}
                     style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)', cursor: 'pointer' }}>
                     <td style={{ padding: '9px 11px' }}>
@@ -130,7 +132,7 @@ export function Portfolio() {
                       </td>
                     </tr>
                   )}
-                )
+                  </React.Fragment>
               })}
             </tbody>
           </table>
