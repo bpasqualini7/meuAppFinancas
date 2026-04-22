@@ -7,6 +7,7 @@ import { insertDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20
 export function Portfolio() {
   const { portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
   const [filter, setFilter] = useState('all')
+  const [expandedTicker, setExpandedTicker] = useState(null)
 
   if (loading) return <Spinner />
 
@@ -47,8 +48,11 @@ export function Portfolio() {
                 const resPct = a.avg_price ? ((price - a.avg_price) / a.avg_price) * 100 : 0
                 const magic = getMagicNumber(price, a.estimated_monthly_dividend_per_share)
                 const saldo = balances[a.ticker] || 0
+                const isExpanded = expandedTicker === a.ticker
                 return (
-                  <tr key={a.asset_id} style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
+                  <tr key={a.asset_id}
+                    onClick={() => setExpandedTicker(isExpanded ? null : a.ticker)}
+                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)', cursor: 'pointer' }}>
                     <td style={{ padding: '9px 11px' }}>
                       <div style={{ fontWeight: 800, color: 'var(--tx)' }}>{a.ticker}</div>
                       <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{a.name}</div>
@@ -88,6 +92,44 @@ export function Portfolio() {
                       <Badge color={a.c20a_included ? 'green' : 'accent'}>{a.c20a_included ? '✓' : '+'}</Badge>
                     </td>
                   </tr>
+                  {isExpanded && (
+                    <tr style={{ borderBottom: '1px solid var(--bd)' }}>
+                      <td colSpan={12} style={{ padding: '0 0 14px 0', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
+                        <div style={{ margin: '0 11px', padding: '14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--bd)' }}>
+                          <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
+                            Detalhes — {a.ticker}
+                          </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                            {[
+                              ['Patrimônio', fmt.brl(price * a.quantity)],
+                              ['Custo total', fmt.brl(a.avg_price * a.quantity)],
+                              ['PM', fmt.brl(a.avg_price)],
+                              ['PMP (bolso)', fmt.brl(a.avg_price_net)],
+                              ['Cotação', fmt.brl(price)],
+                              ['Resultado', fmt.brl(res)],
+                              ['Retorno %', fmt.pct(resPct)],
+                              p?.dy != null && ['DY 12m', `${Number(p.dy).toFixed(1)}%`],
+                              p?.pl != null && ['P/L', `${Number(p.pl).toFixed(1)}x`],
+                              p?.pvp != null && ['P/VP', `${Number(p.pvp).toFixed(2)}x`],
+                              p?.high52 != null && ['Máx 52s', fmt.brl(p.high52)],
+                              p?.low52 != null && ['Mín 52s', fmt.brl(p.low52)],
+                            ].filter(Boolean).map(([label, value]) => (
+                              <div key={label} style={{ background: 'var(--bg2)', borderRadius: 8, padding: '8px 10px' }}>
+                                <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 3 }}>{label}</div>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{value}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {p?.source && (
+                            <div style={{ marginTop: 10, fontSize: 10, color: 'var(--tx3)' }}>
+                              Fonte: {p.source} · {a.asset_class === 'fii' ? 'Fundo Imobiliário' : CLASS_LABEL[a.asset_class]}
+                              {a.sector && ` · ${a.sector}`}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 )
               })}
             </tbody>
@@ -238,58 +280,151 @@ export function C20A() {
 }
 
 // ── WATCHLIST ─────────────────────────────────────────────
+// Modal de detalhes do ativo
+function AssetModal({ ticker, asset, prices, onClose, onNavigate }) {
+  const p = prices[ticker]
+  const indicators = [
+    p?.pl != null    && { label: 'P/L',       value: `${Number(p.pl).toFixed(1)}x`,   ok: p.pl < 12,   bad: p.pl > 20 },
+    p?.pvp != null   && { label: 'P/VP',      value: `${Number(p.pvp).toFixed(2)}x`,  ok: p.pvp < 1,   bad: p.pvp > 2 },
+    p?.dy != null    && { label: 'DY 12m',    value: `${Number(p.dy).toFixed(1)}%`,   ok: p.dy > 6,    bad: p.dy < 3 },
+    p?.high52 != null && { label: 'Máx 52s',  value: fmt.brl(p.high52), ok: false, bad: false },
+    p?.low52 != null  && { label: 'Mín 52s',  value: fmt.brl(p.low52),  ok: false, bad: false },
+    p?.change_pct != null && { label: 'Var. hoje', value: fmt.pct(p.change_pct), ok: p.change_pct > 0, bad: p.change_pct < 0 },
+  ].filter(Boolean)
+
+  // Score de atratividade
+  const score = [p?.pl < 12, p?.pvp < 1.2, p?.dy > 6].filter(Boolean).length
+  const scoreColor = score >= 3 ? 'var(--gr)' : score >= 2 ? 'var(--am)' : 'var(--tx3)'
+  const scoreLabel = score >= 3 ? 'Muito Atraente' : score >= 2 ? 'Atenção' : 'Neutro'
+
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 18, width: '100%', maxWidth: 520, maxHeight: '90vh', overflow: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,.5)' }}>
+        {/* Header */}
+        <div style={{ padding: '20px 20px 0', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <span style={{ fontWeight: 900, fontSize: 22 }}>{ticker}</span>
+              <Badge color={asset?.asset_class === 'fii' ? 'fii' : 'green'}>{CLASS_LABEL[asset?.asset_class] || '—'}</Badge>
+            </div>
+            <div style={{ fontSize: 12, color: 'var(--tx3)' }}>{asset?.name}</div>
+            {asset?.sector && <div style={{ fontSize: 11, color: 'var(--tx3)', marginTop: 2 }}>{asset.sector}</div>}
+          </div>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx3)', cursor: 'pointer', fontSize: 20, padding: 4 }}>✕</button>
+        </div>
+
+        {/* Preço */}
+        {p && (
+          <div style={{ padding: '16px 20px', display: 'flex', alignItems: 'baseline', gap: 12 }}>
+            <span style={{ fontSize: 32, fontWeight: 900 }}>{fmt.brl(p.price)}</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>
+              {fmt.pct(p.change_pct)} hoje
+            </span>
+          </div>
+        )}
+
+        <div style={{ padding: '0 20px 20px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Score */}
+          {indicators.length > 0 && (
+            <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, color: 'var(--tx2)' }}>Score de atratividade</span>
+              <span style={{ fontWeight: 800, fontSize: 14, color: scoreColor }}>{score}/3 — {scoreLabel}</span>
+            </div>
+          )}
+
+          {/* Indicadores */}
+          {indicators.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Indicadores</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 8 }}>
+                {indicators.map(({ label, value, ok, bad }) => (
+                  <div key={label} style={{ background: 'var(--bg3)', borderRadius: 9, padding: '10px 12px', border: ok ? '1px solid rgba(34,197,94,.3)' : bad ? '1px solid rgba(239,68,68,.2)' : '1px solid var(--bd)' }}>
+                    <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontWeight: 800, fontSize: 15, color: ok ? 'var(--gr)' : bad ? 'var(--rd)' : 'var(--tx)' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Regra de bolso */}
+          {p?.pl != null && p?.pvp != null && (
+            <div style={{ padding: '12px 14px', background: score >= 2 ? 'rgba(34,197,94,.05)' : 'rgba(245,158,11,.05)', borderRadius: 10, border: `1px solid ${score >= 2 ? 'rgba(34,197,94,.2)' : 'rgba(245,158,11,.2)'}` }}>
+              <div style={{ fontSize: 12, color: 'var(--tx2)', lineHeight: 1.6 }}>
+                {score >= 3 && '📈 Múltiplos atrativos em todas as dimensões — pode ser uma boa oportunidade de entrada.'}
+                {score === 2 && '⚠ Atenção — alguns indicadores positivos, mas avalie o contexto setorial antes de comprar.'}
+                {score < 2 && '⬤ Indicadores neutros ou elevados — monitore para pontos de entrada mais favoráveis.'}
+              </div>
+            </div>
+          )}
+
+          {/* Ações */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn color="accent" onClick={() => { onClose(); onNavigate && onNavigate('extrato') }}>
+              + Registrar Compra
+            </Btn>
+            <Btn color="ghost" onClick={onClose}>Fechar</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function Watchlist() {
   const { user, watchlist, prices, refreshPortfolio } = useApp()
-  const [search, setSearch] = useState('')
+  const [selectedAsset, setSelectedAsset] = useState(null)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ display: 'flex', gap: 10 }}>
-        <div style={{ flex: 1 }}>
-          <AssetSearch onSelect={async (a) => { await addToWatchlist(user.id, a.id); refreshPortfolio() }} placeholder="Adicionar ativo para acompanhar..." />
-        </div>
+      <div style={{ flex: 1 }}>
+        <AssetSearch onSelect={async (a) => { await addToWatchlist(user.id, a.id); refreshPortfolio() }} placeholder="Adicionar ativo para acompanhar..." />
       </div>
+
       {watchlist.length === 0 ? (
         <Empty icon="◎" message="Nenhum ativo na watchlist. Busque acima para adicionar." />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 14 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
           {watchlist.map(w => {
             const ticker = w.assets?.ticker
             const p = prices[ticker]
-            const metrics = [
-              ['P/L', p?.pl, p?.pl < 12],
-              ['P/VP', p?.pvp, p?.pvp < 1.2],
-              ['DY', p?.dy && `${p.dy.toFixed(1)}%`, p?.dy > 6],
-              ['MM200', p?.ma200 && fmt.brl(p.ma200), p?.price < p?.ma200],
-            ].filter(([, v]) => v)
+            const score = [p?.pl < 12, p?.pvp < 1.2, p?.dy > 6].filter(Boolean).length
             return (
-              <Card key={w.id}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-                  <div><div style={{ fontWeight: 800, fontSize: 18 }}>{ticker}</div><div style={{ fontSize: 11, color: 'var(--tx3)' }}>{w.assets?.name}</div></div>
+              <Card key={w.id} onClick={() => setSelectedAsset(w)} style={{ cursor: 'pointer', transition: 'transform .1s, box-shadow .1s' }}
+                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,.3)' }}
+                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                  <div>
+                    <div style={{ fontWeight: 800, fontSize: 16 }}>{ticker}</div>
+                    <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{w.assets?.name}</div>
+                  </div>
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: 18, fontWeight: 800 }}>{p ? fmt.brl(p.price) : '—'}</div>
-                    {p?.change_pct !== undefined && <div style={{ fontSize: 11, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(p.change_pct)}</div>}
+                    <div style={{ fontSize: 16, fontWeight: 800 }}>{p ? fmt.brl(p.price) : '—'}</div>
+                    {p?.change_pct != null && (
+                      <div style={{ fontSize: 11, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(p.change_pct)}</div>
+                    )}
                   </div>
                 </div>
-                {metrics.length > 0 && (
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 12 }}>
-                    {metrics.map(([l, v, ok]) => (
-                      <div key={l} style={{ background: 'var(--bg3)', borderRadius: 7, padding: '6px 9px' }}>
-                        <div style={{ fontSize: 9, color: 'var(--tx3)' }}>{l}</div>
-                        <div style={{ fontWeight: 700, fontSize: 13, color: ok ? 'var(--gr)' : 'var(--tx)' }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <AttrBadge ticker={ticker} prices={prices} />
-                  <Btn size="sm" color="accent">+ Comprar</Btn>
+                  {score > 0 && (
+                    <span style={{ fontSize: 10, color: 'var(--tx3)' }}>Score {score}/3 · ver mais →</span>
+                  )}
+                  {!p && <span style={{ fontSize: 10, color: 'var(--tx3)' }}>Clique para detalhes →</span>}
                 </div>
-                {w.notes && <p style={{ margin: '10px 0 0', fontSize: 11, color: 'var(--tx3)', paddingTop: 10, borderTop: '1px solid var(--bd)' }}>{w.notes}</p>}
               </Card>
             )
           })}
         </div>
+      )}
+
+      {selectedAsset && (
+        <AssetModal
+          ticker={selectedAsset.assets?.ticker}
+          asset={selectedAsset.assets}
+          prices={prices}
+          onClose={() => setSelectedAsset(null)}
+        />
       )}
     </div>
   )

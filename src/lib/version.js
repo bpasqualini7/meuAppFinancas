@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 7,
-  patch: 13,
+  patch: 14,
   date: '2026-04-20',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.7.14', date: '21/04/2026', desc: 'Carteira: linha expansível com detalhes. Watchlist: modal com indicadores, score e análise' },
   { version: 'v0.7.13', date: '21/04/2026', desc: 'Proxy Vercel serverless para BolsaI e macro — resolve CORS definitivamente' },
   { version: 'v0.7.12', date: '21/04/2026', desc: 'BolsaI integrado como fonte primária de preços BR (ações, FIIs, fundamentais), brapi como fallback' },
   { version: 'v0.7.11', date: '21/04/2026', desc: 'C20A: tabela própria, adicionar/remover ativos, progresso de meta, slots clicáveis' },
