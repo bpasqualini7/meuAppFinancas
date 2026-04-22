@@ -271,6 +271,9 @@ export default function Extrato({ onNavigate }) {
         <Btn onClick={() => setShowForm(s => !s)} color={showForm ? 'ghost' : 'accent'}>
           {showForm ? '✕ Cancelar' : '+ Nova Operação'}
         </Btn>
+        <Btn onClick={() => onNavigate?.('importar')} color="ghost">
+          📥 Importar PDF
+        </Btn>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 16 }}>
           <span style={{ fontSize: 12, color: 'var(--gr)' }}>↑ Compras: <strong>{fmt.brl(totalCompras)}</strong></span>
           <span style={{ fontSize: 12, color: 'var(--rd)' }}>↓ Vendas: <strong>{fmt.brl(totalVendas)}</strong></span>

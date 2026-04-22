@@ -59,7 +59,7 @@ const PAGES = {
 
 // Bottom nav principal (5 itens) + "Mais" para o resto
 const BOTTOM_MAIN = ['dashboard', 'portfolio', 'extrato', 'realizados', 'settings']
-const BOTTOM_MORE = ['c20a', 'watchlist', 'calendario', 'proventos', 'cenario', 'guia', 'importar']
+const BOTTOM_MORE = ['c20a', 'watchlist', 'calendario', 'proventos', 'cenario', 'guia']
 
 function Layout() {
   const { user, profile, loading, macro } = useApp()
