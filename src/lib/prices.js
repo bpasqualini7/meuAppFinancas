@@ -19,10 +19,18 @@ const fromCache = (key) => {
   return c && Date.now() - c.ts < TTL ? c.data : null
 }
 
+// Ativos sem cotação de mercado (Tesouro Direto, CDB, etc.)
+const NO_MARKET_PRICE = (ticker) => 
+  ticker.startsWith('TESOURO') || ticker.startsWith('CDB') || 
+  ticker.startsWith('LCI') || ticker.startsWith('LCA') ||
+  ticker.startsWith('LC') || ticker.includes('IPCA') && ticker.length > 8
+
 // Fetch BR stock / FII via proxy Vercel (/api/quote)
 export const fetchBR = async (ticker) => {
   const hit = fromCache(ticker)
   if (hit) return hit
+  // Renda fixa manual — sem cotação de mercado
+  if (NO_MARKET_PRICE(ticker)) return null
   try {
     const r = await fetch(`/api/quote?ticker=${ticker}`)
     if (!r.ok) return null
