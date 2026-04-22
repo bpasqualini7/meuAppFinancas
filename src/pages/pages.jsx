@@ -393,9 +393,7 @@ export function Watchlist() {
             const p = prices[ticker]
             const score = [p?.pl < 12, p?.pvp < 1.2, p?.dy > 6].filter(Boolean).length
             return (
-              <Card key={w.id} onClick={() => setSelectedAsset(w)} style={{ cursor: 'pointer', transition: 'transform .1s, box-shadow .1s' }}
-                onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-2px)'; e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,.3)' }}
-                onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '' }}>
+              <Card key={w.id} onClick={() => setSelectedAsset(w)} style={{ cursor: 'pointer', transition: 'transform .1s, box-shadow .1s' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 16 }}>{ticker}</div>
