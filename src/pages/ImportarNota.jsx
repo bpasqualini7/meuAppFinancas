@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import * as pdfjsLib from 'pdfjs-dist'
+import pdfjsWorker from 'pdfjs-dist/build/pdf.worker?url'
 import { useApp, fmt, CLASS_LABEL } from '../lib/context'
 import { Card, Btn, Spinner, Badge } from '../components/ui'
 import { ensureAsset, insertOperation, supabase } from '../lib/supabase'
@@ -94,30 +96,24 @@ export default function ImportarNota({ onNavigate }) {
 
   const extractTextFromPDF = async (file) => {
     const arrayBuffer = await file.arrayBuffer()
-
-    // Tenta PDF.js primeiro
-    if (window.pdfjsLib) {
-      try {
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-          'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
-        const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise
-        let text = ''
-        for (let i = 1; i <= pdf.numPages; i++) {
-          const page = await pdf.getPage(i)
-          const content = await page.getTextContent()
-          text += content.items.map(item => item.str).join(' ') + '\n'
-        }
-        return text
-      } catch { /* fallback */ }
-    }
-
-    // Fallback: tentar como texto puro (alguns PDFs são text-based)
     try {
-      const text = await file.text()
-      if (text.includes('Bovespa') || text.includes('NOTA DE CORRETAGEM')) return text
-    } catch { /* ignora */ }
-
-    throw new Error('Não foi possível ler o PDF. Tente em um computador ou use o Chrome.')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorker
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      let text = ''
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i)
+        const content = await page.getTextContent()
+        text += content.items.map(item => item.str).join(' ') + '\n'
+      }
+      return text
+    } catch (e) {
+      // Fallback texto puro
+      try {
+        const text = await file.text()
+        if (text.includes('Bovespa') || text.includes('NOTA DE CORRETAGEM')) return text
+      } catch { }
+      throw new Error('Não foi possível ler o PDF: ' + e.message)
+    }
   }
 
   const handleFile = async (file) => {
