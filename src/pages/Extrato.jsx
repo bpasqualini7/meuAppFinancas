@@ -116,7 +116,7 @@ function OpMenu({ op, onEdit, onDelete }) {
       {open && (
         <>
           <div onClick={() => setOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 90 }} />
-          <div style={{ position: 'absolute', right: 0, top: '100%', background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 10, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,.3)', minWidth: 130, overflow: 'hidden' }}>
+          <div style={{ position: 'fixed', right: 16, background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 10, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,.3)', minWidth: 130, overflow: 'hidden' }}>
             <button onClick={() => { setOpen(false); onEdit(op) }} style={{ width: '100%', padding: '10px 14px', background: 'none', border: 'none', color: 'var(--tx)', cursor: 'pointer', textAlign: 'left', fontSize: 13, fontFamily: 'inherit' }}>
               ✎ Editar
             </button>
