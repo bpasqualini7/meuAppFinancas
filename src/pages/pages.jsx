@@ -377,23 +377,38 @@ function AssetModal({ ticker, asset, prices, onClose, onNavigate }) {
 export function Watchlist() {
   const { user, watchlist, prices, refreshPortfolio } = useApp()
   const [selectedAsset, setSelectedAsset] = useState(null)
+  const [viewMode, setViewMode] = useState('list') // 'list' | 'card'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <div style={{ flex: 1 }}>
-        <AssetSearch onSelect={async (a) => { await addToWatchlist(user.id, a.id); refreshPortfolio() }} placeholder="Adicionar ativo para acompanhar..." />
+      {/* Busca + toggle */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ flex: 1 }}>
+          <AssetSearch onSelect={async (a) => { await addToWatchlist(user.id, a.id); refreshPortfolio() }} placeholder="Adicionar ativo para acompanhar..." />
+        </div>
+        {/* Toggle card/lista */}
+        <div style={{ display: 'flex', border: '1px solid var(--bd)', borderRadius: 9, overflow: 'hidden', flexShrink: 0 }}>
+          {[['list', '☰'], ['card', '⊞']].map(([v, icon]) => (
+            <button key={v} onClick={() => setViewMode(v)} style={{
+              padding: '8px 12px', border: 'none', cursor: 'pointer', fontFamily: 'inherit',
+              fontSize: 14, background: viewMode === v ? 'var(--ac)' : 'var(--bg3)',
+              color: viewMode === v ? 'white' : 'var(--tx3)',
+            }}>{icon}</button>
+          ))}
+        </div>
       </div>
 
       {watchlist.length === 0 ? (
         <Empty icon="◎" message="Nenhum ativo na watchlist. Busque acima para adicionar." />
-      ) : (
+      ) : viewMode === 'card' ? (
+        /* ── Vista Cards ── */
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
           {watchlist.map(w => {
             const ticker = w.assets?.ticker
             const p = prices[ticker]
             const score = [p?.pl < 12, p?.pvp < 1.2, p?.dy > 6].filter(Boolean).length
             return (
-              <Card key={w.id} onClick={() => setSelectedAsset(w)} style={{ cursor: 'pointer', transition: 'transform .1s, box-shadow .1s' }}>
+              <Card key={w.id} onClick={() => setSelectedAsset(w)} style={{ cursor: 'pointer' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
                   <div>
                     <div style={{ fontWeight: 800, fontSize: 16 }}>{ticker}</div>
@@ -408,15 +423,70 @@ export function Watchlist() {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <AttrBadge ticker={ticker} prices={prices} />
-                  {score > 0 && (
-                    <span style={{ fontSize: 10, color: 'var(--tx3)' }}>Score {score}/3 · ver mais →</span>
-                  )}
-                  {!p && <span style={{ fontSize: 10, color: 'var(--tx3)' }}>Clique para detalhes →</span>}
+                  {score > 0 && <span style={{ fontSize: 10, color: 'var(--tx3)' }}>Score {score}/3 →</span>}
+                  {!p && <span style={{ fontSize: 10, color: 'var(--tx3)' }}>ver detalhes →</span>}
                 </div>
               </Card>
             )
           })}
         </div>
+      ) : (
+        /* ── Vista Lista (tabela) ── */
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: 'var(--bg3)' }}>
+                  {['Ativo', 'Cotação', 'Var. Hoje', 'DY', 'P/L', 'P/VP', 'Score', ''].map(h => (
+                    <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap', borderBottom: '1px solid var(--bd)' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {watchlist.map((w, i) => {
+                  const ticker = w.assets?.ticker
+                  const p = prices[ticker]
+                  const score = [p?.pl < 12, p?.pvp < 1.2, p?.dy > 6].filter(Boolean).length
+                  const scoreColor = score >= 3 ? 'var(--gr)' : score >= 2 ? 'var(--am)' : 'var(--tx3)'
+                  return (
+                    <tr key={w.id}
+                      onClick={() => setSelectedAsset(w)}
+                      style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)', cursor: 'pointer' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <div style={{ fontWeight: 800 }}>{ticker}</div>
+                        <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{w.assets?.name}</div>
+                      </td>
+                      <td style={{ padding: '10px 12px', fontWeight: 800 }}>
+                        {p ? fmt.brl(p.price) : '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px', fontWeight: 700, color: p?.change_pct >= 0 ? 'var(--gr)' : p?.change_pct < 0 ? 'var(--rd)' : 'var(--tx3)' }}>
+                        {p?.change_pct != null ? fmt.pct(p.change_pct) : '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px', color: p?.dy > 6 ? 'var(--gr)' : 'var(--tx2)' }}>
+                        {p?.dy != null ? `${Number(p.dy).toFixed(1)}%` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px', color: p?.pl < 12 ? 'var(--gr)' : 'var(--tx2)' }}>
+                        {p?.pl != null ? `${Number(p.pl).toFixed(1)}x` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px', color: p?.pvp < 1.2 ? 'var(--gr)' : 'var(--tx2)' }}>
+                        {p?.pvp != null ? `${Number(p.pvp).toFixed(2)}x` : '—'}
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <span style={{ fontWeight: 800, fontSize: 13, color: scoreColor }}>{score}/3</span>
+                      </td>
+                      <td style={{ padding: '10px 12px' }}>
+                        <AttrBadge ticker={ticker} prices={prices} />
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--tx3)', borderTop: '1px solid var(--bd)' }}>
+            {watchlist.length} ativo{watchlist.length !== 1 ? 's' : ''} · Clique para ver detalhes
+          </div>
+        </Card>
       )}
 
       {selectedAsset && (
