@@ -21,27 +21,40 @@ export default async function handler(req, res) {
   try {
     // Tentar BolsaI primeiro
     if (type === 'quote') {
+      // Tentar o ticker direto e sem sufixo numérico (ex: MXRF11 → MXRF)
+      const tickerBase = ticker.replace(/\d+$/, '')
+      
       const [qRes, sRes] = await Promise.allSettled([
         fetch(`${BASE}/stocks/${ticker}/quote`, { headers }),
         fetch(`${BASE}/stocks/${ticker}/stats`, { headers }),
       ])
-      const q = qRes.status === 'fulfilled' ? await qRes.value.json() : null
-      const s = sRes.status === 'fulfilled' ? await sRes.value.json() : null
+      const q = qRes.status === 'fulfilled' && qRes.value.ok ? await qRes.value.json() : null
+      const s = sRes.status === 'fulfilled' && sRes.value.ok ? await sRes.value.json() : null
 
       if (q?.ticker) {
-        // Buscar fundamentais (FII ou ação)
+        // Buscar fundamentais — tentar FII primeiro, depois ação
         let pl = null, pvp = null, dy = null
-        const fiiRes = await fetch(`${BASE}/fiis/${ticker}`, { headers })
-        if (fiiRes.ok) {
-          const fii = await fiiRes.json()
-          if (fii?.ticker) { pvp = fii.pvp; dy = fii.dividend_yield_ttm }
-        } else {
-          const fundRes = await fetch(`${BASE}/fundamentals/${ticker}`, { headers })
-          if (fundRes.ok) {
-            const fund = await fundRes.json()
-            if (fund?.ticker) { pl = fund.pl; pvp = fund.pvp; dy = fund.dividend_yield_ttm }
+        try {
+          const fiiRes = await fetch(`${BASE}/fiis/${ticker}`, { headers })
+          if (fiiRes.ok) {
+            const fii = await fiiRes.json()
+            if (fii?.ticker) { pvp = fii.pvp; dy = fii.dividend_yield_ttm }
+          } else {
+            // Tentar sem sufixo (ex: MXRF)
+            const fiiRes2 = await fetch(`${BASE}/fiis/${tickerBase}`, { headers })
+            if (fiiRes2.ok) {
+              const fii2 = await fiiRes2.json()
+              if (fii2?.ticker) { pvp = fii2.pvp; dy = fii2.dividend_yield_ttm }
+            } else {
+              const fundRes = await fetch(`${BASE}/fundamentals/${ticker}`, { headers })
+              if (fundRes.ok) {
+                const fund = await fundRes.json()
+                if (fund?.ticker) { pl = fund.pl; pvp = fund.pvp; dy = fund.dividend_yield_ttm }
+              }
+            }
           }
-        }
+        } catch { /* ignora erro em fundamentais */ }
+
         return res.status(200).json({
           price: q.close,
           change_pct: s?.daily_change_pct || 0,
