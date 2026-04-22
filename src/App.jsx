@@ -51,7 +51,7 @@ function CopomBadge({ macro }) {
 }
 
 const PAGES = {
-  dashboard: Dashboard, portfolio: Portfolio, extrato: Extrato, realizados: Realizados,
+  dashboard: Dashboard, portfolio: Portfolio, extrato: Extrato, realizados: Realizados, calendario: Calendario,
   c20a: C20A, watchlist: Watchlist, proventos: Proventos,
   cenario: Cenario, guia: Guia, settings: Settings,
 }
