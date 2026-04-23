@@ -8,40 +8,61 @@ import { ensureAsset, insertOperation, supabase } from '../lib/supabase'
 // ── Parser de texto da nota Inter ────────────────────────
 function parseInterNota(text) {
   const ops = []
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean)
+  const simpleBr = (v) => parseFloat(String(v).replace(/\./g, '').replace(',', '.'))
 
   // Data do pregão
-  const dateMatch = text.match(/Data prega[oõ]\s*[\n\r]*(\d{2}\/\d{2}\/\d{4})/)
+  const dateMatch = text.match(/Data\s*prega[oõ]\s*(\d{2}\/\d{2}\/\d{4})/)
   const pregaoDate = dateMatch
     ? dateMatch[1].split('/').reverse().join('-')
     : new Date().toISOString().slice(0, 10)
 
-  // Linhas de negócio — padrão Inter:
-  // Bovespa C VIS CI FII PVBI VBI 1 79,15 79,15 D
-  const opRegex = /Bovespa\s+(C|V)\s+\w+\s+(.*?)\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)\s+D?$/
-  const simpleBr = (v) => parseFloat(v.replace(/\./g, '').replace(',', '.'))
+  // PDF.js extrai texto contínuo — busca todas ocorrências de "Bovespa C/V"
+  // Padrão: Bovespa [C|V] [TIPO] [SUBTIPO?] [DESC...] [QTY] [PRECO] [TOTAL] D?
+  const opPattern = /Bovespa\s+(C|V)\s+\w+(?:\s+\w+){0,2}\s+((?:[A-ZÁÉÍÓÚ0-9&]{2,}\s+){1,6})(\d{1,6})\s+(\d{1,9}[.,]\d{2})\s+(\d{1,9}[.,]\d{2})/g
 
-  for (const line of lines) {
-    const m = line.match(/^Bovespa\s+(C|V)\s+\S+\s+(?:\S+\s+)?(?:\S+\s+)?(.*?)\s+(\d+)\s+([\d.,]+)\s+([\d.,]+)\s*D?$/)
-    if (!m) continue
-    const [, cv, desc, qty, priceStr, totalStr] = m
-    const quantity = parseInt(qty)
+  let m
+  const seen = new Set()
+  while ((m = opPattern.exec(text)) !== null) {
+    const [full, cv, descRaw, qtyStr, priceStr, totalStr] = m
+    const quantity = parseInt(qtyStr)
     const unit_price = simpleBr(priceStr)
     const total_value = simpleBr(totalStr)
-    if (!quantity || !unit_price) continue
+    if (!quantity || !unit_price || quantity > 999999) continue
+    // Evitar duplicatas por posição
+    const key = `${cv}_${quantity}_${priceStr}`
+    if (seen.has(key)) continue
+    seen.add(key)
 
     ops.push({
       op_type: cv === 'C' ? 'buy' : 'sell',
-      description: desc.trim(),
-      quantity,
-      unit_price,
-      total_value,
-      op_date: pregaoDate,
-      broker: 'inter',
-      _ticker: null,   // será resolvido depois
-      _resolved: false,
+      description: descRaw.trim().replace(/\s+/g, ' '),
+      quantity, unit_price, total_value,
+      op_date: pregaoDate, broker: 'inter',
+      _ticker: null, _resolved: false,
     })
   }
+
+  // Fallback: texto com quebras de linha
+  if (ops.length === 0) {
+    for (const line of text.split(/[
+
+]+/).map(l => l.trim()).filter(Boolean)) {
+      const lm = line.match(/^Bovespa\s+(C|V)\s+\S+(?:\s+\S+){0,2}\s+(.*?)\s+(\d+)\s+(\d+[.,]\d{2})\s+(\d+[.,]\d{2})/)
+      if (!lm) continue
+      const [, cv, desc, qtyStr, priceStr, totalStr] = lm
+      const quantity = parseInt(qtyStr)
+      const unit_price = simpleBr(priceStr)
+      const total_value = simpleBr(totalStr)
+      if (!quantity || !unit_price) continue
+      ops.push({
+        op_type: cv === 'C' ? 'buy' : 'sell',
+        description: desc.trim(), quantity, unit_price, total_value,
+        op_date: pregaoDate, broker: 'inter',
+        _ticker: null, _resolved: false,
+      })
+    }
+  }
+
   return { ops, pregaoDate }
 }
 
@@ -199,11 +220,15 @@ export default function ImportarNota({ onNavigate }) {
             O PDF é processado localmente — nenhum dado é enviado para servidores externos.
           </p>
 
-          <label style={{
-            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-            padding: '36px 24px', borderRadius: 12, border: '2px dashed var(--bd)',
-            background: 'var(--bg3)', cursor: 'pointer', gap: 10,
-          }}>
+          <label
+            onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--ac)' }}
+            onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)' }}
+            onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--bd)'; const f = e.dataTransfer.files[0]; f && handleFile(f) }}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+              padding: '36px 24px', borderRadius: 12, border: '2px dashed var(--bd)',
+              background: 'var(--bg3)', cursor: 'pointer', gap: 10, transition: 'border-color .15s',
+            }}>
             <span style={{ fontSize: 36 }}>📄</span>
             <span style={{ fontWeight: 700, fontSize: 14 }}>Clique ou arraste o PDF aqui</span>
             <span style={{ fontSize: 12, color: 'var(--tx3)' }}>Nota de Corretagem Inter (.pdf)</span>
