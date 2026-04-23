@@ -44,9 +44,7 @@ function parseInterNota(text) {
 
   // Fallback: texto com quebras de linha
   if (ops.length === 0) {
-    for (const line of text.split(/[
-
-]+/).map(l => l.trim()).filter(Boolean)) {
+    for (const line of text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)) {
       const lm = line.match(/^Bovespa\s+(C|V)\s+\S+(?:\s+\S+){0,2}\s+(.*?)\s+(\d+)\s+(\d+[.,]\d{2})\s+(\d+[.,]\d{2})/)
       if (!lm) continue
       const [, cv, desc, qtyStr, priceStr, totalStr] = lm
