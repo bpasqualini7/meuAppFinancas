@@ -8,7 +8,7 @@ import { ensureAsset, insertOperation, supabase } from '../lib/supabase'
 // ── Parser de texto da nota Inter ────────────────────────
 function parseInterNota(text) {
   const ops = []
-  const simpleBr = (v) => parseFloat(String(v).replace(/\./g, '').replace(',', '.'))
+  const simpleBr = (v) => parseFloat(String(v).replace(/\./, '').replace(',', '.'))
 
   // Data do pregão
   const dateMatch = text.match(/Data\s*prega[oõ]\s*(\d{2}\/\d{2}\/\d{4})/)
@@ -16,68 +16,51 @@ function parseInterNota(text) {
     ? dateMatch[1].split('/').reverse().join('-')
     : new Date().toISOString().slice(0, 10)
 
-  // PDF.js extrai texto contínuo — busca todas ocorrências de "Bovespa C/V"
-  // Padrão: Bovespa [C|V] [TIPO] [SUBTIPO?] [DESC...] [QTY] [PRECO] [TOTAL] D?
-  const opPattern = /Bovespa\s+(C|V)\s+\w+(?:\s+\w+){0,2}\s+((?:[A-ZÁÉÍÓÚ0-9&]{2,}\s+){1,6})(\d{1,6})\s+(\d{1,9}[.,]\d{2})\s+(\d{1,9}[.,]\d{2})/g
+  // Padrão real do Inter (texto contínuo do PDF.js):
+  // "Bovespa VIS C 1 79,15 79,15 D CI FII PVBI VBI Bovespa..."
+  // Captura: [TIPO mercado] [C|V] [QTD] [PRECO] [TOTAL] D [DESC até próximo Bovespa]
+  const raw = text.replace(/\s+/g, ' ')
+  const pattern = /Bovespa \w+ (C|V) (\d+) (\d+,\d{2}) (\d+,\d{2}) D ([A-Z0-9 ]+?)(?= Bovespa| Líquido| Resumo|$)/g
 
   let m
-  const seen = new Set()
-  while ((m = opPattern.exec(text)) !== null) {
-    const [full, cv, descRaw, qtyStr, priceStr, totalStr] = m
+  while ((m = pattern.exec(raw)) !== null) {
+    const [, cv, qtyStr, priceStr, totalStr, descRaw] = m
     const quantity = parseInt(qtyStr)
     const unit_price = simpleBr(priceStr)
     const total_value = simpleBr(totalStr)
-    if (!quantity || !unit_price || quantity > 999999) continue
-    // Evitar duplicatas por posição
-    const key = `${cv}_${quantity}_${priceStr}`
-    if (seen.has(key)) continue
-    seen.add(key)
+    if (!quantity || !unit_price || unit_price < 0.01) continue
 
+    // Limpar prefixos de mercado da descrição
+    const desc = descRaw.trim()
+      .replace(/^(CI ER|CI ES|CI FI|CI|UNT N2|ON N2|FRA N2|ON N1|PN N1|UNT|ON|PN) /, '')
+      .trim()
+
+    if (!desc) continue
     ops.push({
       op_type: cv === 'C' ? 'buy' : 'sell',
-      description: descRaw.trim().replace(/\s+/g, ' '),
+      description: desc,
       quantity, unit_price, total_value,
       op_date: pregaoDate, broker: 'inter',
       _ticker: null, _resolved: false,
     })
   }
 
-  // Fallback: texto com quebras de linha
-  if (ops.length === 0) {
-    for (const line of text.split(/[\n\r]+/).map(l => l.trim()).filter(Boolean)) {
-      const lm = line.match(/^Bovespa\s+(C|V)\s+\S+(?:\s+\S+){0,2}\s+(.*?)\s+(\d+)\s+(\d+[.,]\d{2})\s+(\d+[.,]\d{2})/)
-      if (!lm) continue
-      const [, cv, desc, qtyStr, priceStr, totalStr] = lm
-      const quantity = parseInt(qtyStr)
-      const unit_price = simpleBr(priceStr)
-      const total_value = simpleBr(totalStr)
-      if (!quantity || !unit_price) continue
-      ops.push({
-        op_type: cv === 'C' ? 'buy' : 'sell',
-        description: desc.trim(), quantity, unit_price, total_value,
-        op_date: pregaoDate, broker: 'inter',
-        _ticker: null, _resolved: false,
-      })
-    }
-  }
-
   return { ops, pregaoDate }
 }
 
-// Mapear nome da nota para ticker — busca no Supabase + heurística
+// ── Mapear nome da nota para ticker ───────────────────────
 async function resolveTicker(description) {
-  const desc = description.toUpperCase()
+  const desc = description.toUpperCase().trim()
 
-  // 1. Busca no Supabase por nome
+  // 1. Busca exata no Supabase por nome
   const { data } = await supabase
     .from('assets')
     .select('id, ticker, name, asset_class')
     .ilike('name', `%${desc.split(' ').slice(-2).join(' ')}%`)
     .limit(3)
-
   if (data && data.length > 0) return data[0]
 
-  // 2. Busca por palavras-chave no nome
+  // 2. Busca por cada palavra significativa
   const words = desc.split(' ').filter(w => w.length > 3)
   for (const word of words) {
     const { data: d2 } = await supabase
@@ -88,7 +71,7 @@ async function resolveTicker(description) {
     if (d2 && d2.length > 0) return d2[0]
   }
 
-  // 3. Tenta detectar ticker diretamente no description (ex: "PVBI VBI" → PVBI11)
+  // 3. Detectar ticker no texto (ex: "PVBI VBI" → PVBI11)
   const tickerMatch = desc.match(/\b([A-Z]{4}\d{2})\b/)
   if (tickerMatch) {
     const { data: d3 } = await supabase
