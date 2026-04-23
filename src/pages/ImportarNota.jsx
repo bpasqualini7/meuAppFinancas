@@ -150,7 +150,7 @@ export default function ImportarNota({ onNavigate }) {
 
       // Debug — mostrar texto bruto se nenhuma op encontrada
       if (parsed.length === 0) {
-        setError('Nenhuma operação encontrada. Texto extraído (primeiros 500 chars):\n\n' + fullText.substring(0, 500))
+        setError('Texto extraído (2000 chars):\n\n' + fullText.substring(0, 2000))
         setLoading(false)
         return
       }
