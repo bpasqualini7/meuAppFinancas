@@ -95,6 +95,7 @@ export default function ImportarNota({ onNavigate }) {
   const [error, setError] = useState(null)
   const [importCount, setImportCount] = useState(0)
   const [selected, setSelected] = useState({})
+  const [filesInfo, setFilesInfo] = useState([])  // info dos arquivos processados
 
   const extractTextFromPDF = async (file) => {
     const arrayBuffer = await file.arrayBuffer()
@@ -118,48 +119,37 @@ export default function ImportarNota({ onNavigate }) {
     }
   }
 
-  const handleFile = async (file) => {
-    if (!file) return
-    if (file.type !== 'application/pdf' && !file.name.endsWith('.pdf')) {
-      setError('Selecione um arquivo PDF válido.')
-      return
+  const handleFiles = async (files) => {
+    const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'))
+    if (pdfs.length === 0) { setError('Selecione arquivos PDF válidos.'); return }
+    setLoading(true); setError(null)
+    const allOps = [], infos = []
+    let debugText = null
+
+    for (const file of pdfs) {
+      try {
+        const fullText = await extractTextFromPDF(file)
+        const { ops: parsed, pregaoDate: date } = parseInterNota(fullText)
+        if (parsed.length === 0) { debugText = fullText.substring(0, 2000); infos.push({ name: file.name, error: 'Sem operações detectadas' }); continue }
+        const resolved = await Promise.all(parsed.map(async op => {
+          const asset = await resolveTicker(op.description)
+          return { ...op, _asset: asset, _ticker: asset?.ticker || null, _resolved: !!asset }
+        }))
+        infos.push({ name: file.name, date, count: resolved.length })
+        allOps.push(...resolved)
+      } catch (e) { infos.push({ name: file.name, error: e.message }) }
     }
-    setLoading(true)
-    setError(null)
-    try {
-      const fullText = await extractTextFromPDF(file)
 
-      const { ops: parsed, pregaoDate: date } = parseInterNota(fullText)
-
-      // Debug — mostrar texto bruto se nenhuma op encontrada
-      if (parsed.length === 0) {
-        setError('Texto extraído (2000 chars):\n\n' + fullText.substring(0, 2000))
-        setLoading(false)
-        return
-      }
-      if (parsed.length === 0) {
-        setError('Nenhuma operação encontrada. Verifique se é uma nota do Inter. Tente abrir o PDF no Chrome do computador.')
-        setLoading(false)
-        return
-      }
-
-      const resolved = await Promise.all(parsed.map(async op => {
-        const asset = await resolveTicker(op.description)
-        return { ...op, _asset: asset, _ticker: asset?.ticker || null, _resolved: !!asset }
-      }))
-
-      setPregaoDate(date)
-      setOps(resolved)
-      setSelected(Object.fromEntries(resolved.map((_, i) => [i, true])))
-      setStep('review')
-    } catch (e) {
-      setError(e.message || 'Erro ao processar PDF.')
-    } finally {
-      setLoading(false)
+    if (allOps.length === 0) {
+      setError(debugText ? 'Texto extraído (debug):\n\n' + debugText : 'Nenhuma operação encontrada.')
+      setLoading(false); return
     }
+    setFilesInfo(infos); setOps(allOps)
+    setSelected(Object.fromEntries(allOps.map((_, i) => [i, true])))
+    setStep('review'); setLoading(false)
   }
 
-  const handleImport = async () => {
+    const handleImport = async () => {
     setStep('importing')
     let count = 0
     for (let i = 0; i < ops.length; i++) {
@@ -204,17 +194,17 @@ export default function ImportarNota({ onNavigate }) {
           <label
             onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--ac)' }}
             onDragLeave={e => { e.currentTarget.style.borderColor = 'var(--bd)' }}
-            onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--bd)'; const f = e.dataTransfer.files[0]; f && handleFile(f) }}
+            onDrop={e => { e.preventDefault(); e.currentTarget.style.borderColor = 'var(--bd)'; e.dataTransfer.files.length && handleFiles(e.dataTransfer.files) }}
             style={{
               display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
               padding: '36px 24px', borderRadius: 12, border: '2px dashed var(--bd)',
               background: 'var(--bg3)', cursor: 'pointer', gap: 10, transition: 'border-color .15s',
             }}>
             <span style={{ fontSize: 36 }}>📄</span>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>Clique ou arraste o PDF aqui</span>
-            <span style={{ fontSize: 12, color: 'var(--tx3)' }}>Nota de Corretagem Inter (.pdf)</span>
-            <input type="file" accept=".pdf" style={{ display: 'none' }}
-              onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Clique ou arraste os PDFs aqui</span>
+            <span style={{ fontSize: 12, color: 'var(--tx3)' }}>Múltiplas notas suportadas · Inter DTVM (.pdf)</span>
+            <input type="file" accept=".pdf" multiple style={{ display: 'none' }}
+              onChange={e => e.target.files?.length && handleFiles(e.target.files)} />
           </label>
 
           {loading && <div style={{ marginTop: 16 }}><Spinner /></div>}
@@ -228,8 +218,17 @@ export default function ImportarNota({ onNavigate }) {
           <Card style={{ padding: '12px 16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
-                <div style={{ fontWeight: 800, fontSize: 14 }}>Nota Inter — {new Date(pregaoDate + 'T00:00:00').toLocaleDateString('pt-BR')}</div>
-                <div style={{ fontSize: 12, color: 'var(--tx3)', marginTop: 2 }}>{ops.filter((_, i) => selected[i]).length} de {ops.length} operações selecionadas</div>
+                <div style={{ fontWeight: 800, fontSize: 14 }}>
+                  {filesInfo.length} nota{filesInfo.length !== 1 ? 's' : ''} processada{filesInfo.length !== 1 ? 's' : ''}
+                </div>
+                {filesInfo.map((f, i) => (
+                  <div key={i} style={{ fontSize: 11, color: f.error ? 'var(--rd)' : 'var(--tx3)', marginTop: 2 }}>
+                    {f.error ? `❌ ${f.name}: ${f.error}` : `✓ ${f.name} — ${f.count} operações`}
+                  </div>
+                ))}
+                <div style={{ fontSize: 12, color: 'var(--ac)', marginTop: 6, fontWeight: 700 }}>
+                  {ops.filter((_, i) => selected[i]).length} de {ops.length} operações selecionadas
+                </div>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Btn size="sm" color="ghost" onClick={() => setStep('upload')}>← Voltar</Btn>
