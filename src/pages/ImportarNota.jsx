@@ -132,6 +132,14 @@ export default function ImportarNota({ onNavigate }) {
     const allOps = [], infos = [], dups = []
     let debugText = null
 
+    // Carregar aliases salvos (descrição → ticker)
+    const { data: aliasData } = await supabase
+      .from('ticker_aliases')
+      .select('description, ticker, asset_id')
+      .eq('user_id', user.id)
+    const aliasMap = {}
+    ;(aliasData || []).forEach(a => { aliasMap[a.description.toUpperCase()] = a })
+
     // Verificar notas já importadas
     const { data: importedNotes } = await supabase
       .from('imported_notes')
@@ -152,6 +160,12 @@ export default function ImportarNota({ onNavigate }) {
         }
         if (parsed.length === 0) { debugText = fullText.substring(0, 2000); infos.push({ name: file.name, error: 'Sem operações detectadas' }); continue }
         const resolved = await Promise.all(parsed.map(async op => {
+          // Verificar alias salvo primeiro
+          const alias = aliasMap[op.description.toUpperCase()]
+          if (alias) {
+            const { data: aliasAsset } = await supabase.from('assets').select('id,ticker,name,asset_class').eq('ticker', alias.ticker).single()
+            if (aliasAsset) return { ...op, _asset: aliasAsset, _ticker: alias.ticker, _resolved: true, _fromAlias: true }
+          }
           const asset = await resolveTicker(op.description)
           return { ...op, _asset: asset, _ticker: asset?.ticker || null, _resolved: !!asset }
         }))
@@ -310,7 +324,9 @@ export default function ImportarNota({ onNavigate }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 800, fontSize: 13 }}>
                     {op._ticker
-                      ? <><span style={{ color: 'var(--ac)' }}>{op._ticker}</span> · <span style={{ fontWeight: 400, color: 'var(--tx3)', fontSize: 11 }}>{op.description}</span></>
+                      ? <><span style={{ color: 'var(--ac)' }}>{op._ticker}</span>
+                          {op._fromAlias && <span style={{ fontSize: 10, color: 'var(--gr)', marginLeft: 4 }}>✓ alias</span>}
+                          · <span style={{ fontWeight: 400, color: 'var(--tx3)', fontSize: 11 }}>{op.description}</span></>
                       : <span style={{ color: 'var(--am)' }}>⚠ {op.description}</span>
                     }
                   </div>
@@ -336,6 +352,13 @@ export default function ImportarNota({ onNavigate }) {
                             existing = created
                           }
                           if (existing) {
+                            // Salvar alias para uso futuro
+                            await supabase.from('ticker_aliases').upsert({
+                              user_id: user.id,
+                              description: op.description.toUpperCase(),
+                              ticker: existing.ticker,
+                              asset_id: existing.id,
+                            }, { onConflict: 'user_id,description' })
                             const newOps = [...ops]
                             newOps[i] = { ...newOps[i], _ticker: ticker, _asset: existing, _resolved: true }
                             setOps(newOps)
