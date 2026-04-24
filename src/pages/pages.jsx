@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react'
 import React from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Spinner, Empty, Input, KPI } from '../components/ui'
-import { insertDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A } from '../lib/supabase'
+import { insertDividend, deleteDividend, updateDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A } from '../lib/supabase'
 
 export function Portfolio() {
   const { portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
@@ -508,11 +508,37 @@ export function Proventos() {
   const [selectedAsset, setSelectedAsset] = useState(null)
   const [form, setForm] = useState({ amount_per_share: '', payment_date: new Date().toISOString().slice(0, 10), quantity_held: '' })
   const [saving, setSaving] = useState(false)
+  const [editingId, setEditingId] = useState(null)
+  const [filterTicker, setFilterTicker] = useState('')
+  const [menuId, setMenuId] = useState(null)
 
-  const total = dividends.reduce((s, d) => s + d.total_amount, 0)
-  const saldo = divBalances.reduce((s, d) => s + (d.available_balance || 0), 0)
   const year = new Date().getFullYear()
   const totalYear = dividends.filter(d => new Date(d.payment_date).getFullYear() === year).reduce((s, d) => s + d.total_amount, 0)
+  const saldo = divBalances.reduce((s, d) => s + (d.available_balance || 0), 0)
+  const avgMonthly = totalYear / (new Date().getMonth() + 1)
+
+  // Agrupado por mês para gráfico
+  const byMonth = {}
+  dividends.filter(d => new Date(d.payment_date).getFullYear() === year).forEach(d => {
+    const m = new Date(d.payment_date).getMonth()
+    byMonth[m] = (byMonth[m] || 0) + d.total_amount
+  })
+  const maxMonth = Math.max(...Object.values(byMonth), 1)
+  const MONTHS = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez']
+
+  // Agrupado por ativo
+  const byAsset = {}
+  dividends.forEach(d => {
+    const t = d.assets?.ticker || '?'
+    if (!byAsset[t]) byAsset[t] = { ticker: t, name: d.assets?.name, total: 0, count: 0, last: d.payment_date }
+    byAsset[t].total += d.total_amount
+    byAsset[t].count += 1
+    if (d.payment_date > byAsset[t].last) byAsset[t].last = d.payment_date
+  })
+
+  const filtered = filterTicker
+    ? dividends.filter(d => d.assets?.ticker?.includes(filterTicker.toUpperCase()))
+    : dividends
 
   const handleSave = async () => {
     if (!selectedAsset || !form.amount_per_share || !form.quantity_held) return
@@ -520,159 +546,165 @@ export function Proventos() {
     try {
       const qty = parseFloat(form.quantity_held)
       const aps = parseFloat(form.amount_per_share)
-      await insertDividend({
-        user_id: user.id, asset_id: selectedAsset.id,
-        amount_per_share: aps, quantity_held: qty,
-        total_amount: aps * qty, payment_date: form.payment_date, source: 'manual',
-      })
+      const payload = { user_id: user.id, asset_id: selectedAsset.id, amount_per_share: aps, quantity_held: qty, total_amount: aps * qty, payment_date: form.payment_date, source: 'manual' }
+      if (editingId) { await updateDividend(editingId, { amount_per_share: aps, quantity_held: qty, total_amount: aps * qty, payment_date: form.payment_date }) }
+      else { await insertDividend(payload) }
       await refreshPortfolio()
-      setTab('list')
-      setSelectedAsset(null)
+      setTab('list'); setSelectedAsset(null); setEditingId(null)
       setForm({ amount_per_share: '', payment_date: new Date().toISOString().slice(0, 10), quantity_held: '' })
-    } finally {
-      setSaving(false)
-    }
+    } finally { setSaving(false) }
+  }
+
+  const handleEdit = (d) => {
+    setEditingId(d.id)
+    setSelectedAsset(d.assets)
+    setForm({ amount_per_share: String(d.amount_per_share), payment_date: d.payment_date, quantity_held: String(d.quantity_held) })
+    setTab('add'); setMenuId(null)
+  }
+
+  const handleDelete = async (id) => {
+    if (!confirm('Excluir este provento?')) return
+    await deleteDividend(id); await refreshPortfolio(); setMenuId(null)
   }
 
   if (loading) return <Spinner />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }} onClick={() => setMenuId(null)}>
+
+      {/* KPIs */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: 10 }}>
         <KPI label={`Total ${year}`} value={fmt.brl(totalYear)} sub="Proventos recebidos" color="var(--gr)" />
+        <KPI label="Média Mensal" value={fmt.brl(avgMonthly)} sub={`Jan–${MONTHS[new Date().getMonth()]} ${year}`} />
         <KPI label="Saldo Disponível" value={fmt.brl(saldo)} sub="Para reinvestir" color="var(--am)" />
-        <KPI label="Média Mensal" value={fmt.brl(totalYear / (new Date().getMonth() + 1))} sub={`Jan–${new Date().toLocaleString('pt-BR', { month: 'short' })} ${year}`} />
+        <KPI label="Total Histórico" value={fmt.brl(dividends.reduce((s,d) => s+d.total_amount,0))} sub={`${dividends.length} lançamentos`} />
       </div>
 
-      <div style={{ display: 'flex', gap: 8 }}>
-        {[['list', 'Histórico'], ['add', '+ Lançar Provento'], ['balances', 'Saldos por Ativo']].map(([t, l]) => (
+      {/* Gráfico mensal */}
+      {Object.keys(byMonth).length > 0 && (
+        <Card>
+          <div style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 14 }}>Proventos por Mês — {year}</div>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, height: 80 }}>
+            {MONTHS.map((m, i) => {
+              const val = byMonth[i] || 0
+              const h = val ? Math.max((val / maxMonth) * 72, 4) : 0
+              const isCurrentMonth = i === new Date().getMonth()
+              return (
+                <div key={m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+                  {val > 0 && <div style={{ fontSize: 8, color: 'var(--gr)', fontWeight: 700 }}>{fmt.brl(val).replace('R$ ','')}</div>}
+                  <div style={{ width: '100%', height: h, borderRadius: '3px 3px 0 0', background: isCurrentMonth ? 'var(--ac)' : 'var(--gr)', opacity: val ? 1 : 0.1, minHeight: 3 }} />
+                  <div style={{ fontSize: 8, color: isCurrentMonth ? 'var(--ac)' : 'var(--tx3)', fontWeight: isCurrentMonth ? 700 : 400 }}>{m}</div>
+                </div>
+              )
+            })}
+          </div>
+        </Card>
+      )}
+
+      {/* Tabs */}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {[['list','Histórico'],['byAsset','Por Ativo'],['add', editingId ? '✎ Editar' : '+ Lançar']].map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} style={{ padding: '8px 16px', borderRadius: 8, border: 'none', background: tab === t ? 'var(--ac)' : 'var(--bg3)', color: tab === t ? 'white' : 'var(--tx2)', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>{l}</button>
         ))}
+        {editingId && <button onClick={() => { setEditingId(null); setSelectedAsset(null); setForm({ amount_per_share: '', payment_date: new Date().toISOString().slice(0, 10), quantity_held: '' }); setTab('list') }} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'transparent', color: 'var(--tx3)', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>✕ Cancelar edição</button>}
       </div>
 
+      {/* Histórico */}
       {tab === 'list' && (
-        <Card>
-          {dividends.length === 0 ? <Empty icon="◇" message="Nenhum provento lançado ainda." /> : (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ padding: '12px 14px', borderBottom: '1px solid var(--bd)' }}>
+            <input value={filterTicker} onChange={e => setFilterTicker(e.target.value)} placeholder="Filtrar por ativo..." style={{ width: '100%', padding: '7px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+          </div>
+          {filtered.length === 0 ? <div style={{ padding: 24 }}><Empty icon="◇" message="Nenhum provento lançado ainda." /></div> : (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <thead><tr style={{ background: 'var(--bg3)' }}>{['Ativo','Data','Valor Total','Por Cota','Cotas','Saldo',''].map(h => <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {filtered.sort((a,b) => b.payment_date.localeCompare(a.payment_date)).map((d, i) => (
+                    <tr key={d.id} style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
+                      <td style={{ padding: '9px 12px', fontWeight: 800 }}>{d.assets?.ticker}<div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 400 }}>{d.assets?.name}</div></td>
+                      <td style={{ padding: '9px 12px', color: 'var(--tx2)', whiteSpace: 'nowrap' }}>{fmt.date(d.payment_date)}</td>
+                      <td style={{ padding: '9px 12px', fontWeight: 800, color: 'var(--gr)' }}>{fmt.brl(d.total_amount)}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{fmt.brl(d.amount_per_share)}</td>
+                      <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{fmt.num(d.quantity_held, 0)}</td>
+                      <td style={{ padding: '9px 12px' }}><span style={{ color: (d.available_balance||0) > 0 ? 'var(--am)' : 'var(--tx3)', fontWeight: 700 }}>{fmt.brl(d.available_balance||0)}</span></td>
+                      <td style={{ padding: '9px 12px', position: 'relative' }} onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setMenuId(menuId === d.id ? null : d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx3)', fontSize: 16, padding: '2px 6px' }}>···</button>
+                        {menuId === d.id && (
+                          <div style={{ position: 'fixed', right: 16, background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 10, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,.3)', minWidth: 120, overflow: 'hidden' }}>
+                            <button onClick={() => handleEdit(d)} style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--tx)', cursor: 'pointer', fontSize: 13 }}>✎ Editar</button>
+                            <button onClick={() => handleDelete(d.id)} style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--rd)', cursor: 'pointer', fontSize: 13 }}>✕ Excluir</button>
+                          </div>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--tx3)', borderTop: '1px solid var(--bd)' }}>{filtered.length} lançamento{filtered.length !== 1 ? 's' : ''}</div>
+        </Card>
+      )}
+
+      {/* Por Ativo */}
+      {tab === 'byAsset' && (
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead><tr>{['Ativo', 'Total', 'Por Cota', 'Cotas', 'Data', 'Saldo Disp.'].map(h => <th key={h} style={{ padding: '8px 10px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--bd)' }}>{h}</th>)}</tr></thead>
+              <thead><tr style={{ background: 'var(--bg3)' }}>{['Ativo','Total Recebido','Lançamentos','Último Pagamento','Média/Pagto'].map(h => <th key={h} style={{ padding: '9px 12px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
               <tbody>
-                {dividends.map((d, i) => (
-                  <tr key={d.id} style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
-                    <td style={{ padding: '8px 10px', fontWeight: 800 }}>{d.assets?.ticker}</td>
-                    <td style={{ padding: '8px 10px', fontWeight: 800, color: 'var(--gr)' }}>{fmt.brl(d.total_amount)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--tx2)' }}>{fmt.brl(d.amount_per_share)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--tx2)' }}>{fmt.num(d.quantity_held, 0)}</td>
-                    <td style={{ padding: '8px 10px', color: 'var(--tx2)' }}>{fmt.date(d.payment_date)}</td>
-                    <td style={{ padding: '8px 10px' }}>
-                      <span style={{ color: (d.available_balance || 0) > 0 ? 'var(--am)' : 'var(--tx3)', fontWeight: 700 }}>
-                        {fmt.brl(d.available_balance || 0)}
-                      </span>
-                    </td>
+                {Object.values(byAsset).sort((a,b) => b.total - a.total).map((a, i) => (
+                  <tr key={a.ticker} style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
+                    <td style={{ padding: '9px 12px', fontWeight: 800 }}>{a.ticker}<div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 400 }}>{a.name}</div></td>
+                    <td style={{ padding: '9px 12px', fontWeight: 800, color: 'var(--gr)' }}>{fmt.brl(a.total)}</td>
+                    <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{a.count}×</td>
+                    <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{fmt.date(a.last)}</td>
+                    <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{fmt.brl(a.total / a.count)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          )}
+          </div>
         </Card>
       )}
 
+      {/* Formulário */}
       {tab === 'add' && (
         <Card>
-          <h3 style={{ fontSize: 14, fontWeight: 800, marginBottom: 16 }}>Lançar Provento Recebido</h3>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 14 }}>
-            <div style={{ gridColumn: '1/-1' }}>
-              <label style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.05em', display: 'block', marginBottom: 5 }}>Ativo</label>
-              <AssetSearch onSelect={setSelectedAsset} placeholder="Buscar ativo..." />
-              {selectedAsset && <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ac)' }}>✓ {selectedAsset.ticker}</div>}
-            </div>
-            <Input label="Valor por cota (R$)" type="number" value={form.amount_per_share} onChange={e => setForm(f => ({ ...f, amount_per_share: e.target.value }))} placeholder="0,00" />
-            <Input label="Cotas na data" type="number" value={form.quantity_held} onChange={e => setForm(f => ({ ...f, quantity_held: e.target.value }))} placeholder="0" />
-            <Input label="Data de pagamento" type="date" value={form.payment_date} onChange={e => setForm(f => ({ ...f, payment_date: e.target.value }))} />
-            {form.amount_per_share && form.quantity_held && (
-              <div style={{ padding: '10px 14px', background: 'var(--bg3)', borderRadius: 9, fontSize: 13 }}>
-                Total: <strong style={{ color: 'var(--gr)' }}>{fmt.brl(parseFloat(form.amount_per_share || 0) * parseFloat(form.quantity_held || 0))}</strong>
+          <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 16 }}>{editingId ? 'Editar Provento' : 'Lançar Provento'}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {!editingId && (
+              <div>
+                <div style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 6 }}>Ativo</div>
+                <AssetSearch onSelect={a => setSelectedAsset(a)} placeholder="Buscar ativo..." />
+                {selectedAsset && <div style={{ marginTop: 6, padding: '6px 10px', background: 'var(--bg3)', borderRadius: 8, fontSize: 12, color: 'var(--ac)', fontWeight: 700 }}>✓ {selectedAsset.ticker} — {selectedAsset.name}</div>}
               </div>
             )}
-          </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <Btn onClick={handleSave} color="green" disabled={saving || !selectedAsset}>
-              {saving ? 'Salvando...' : 'Salvar Provento'}
+            {editingId && selectedAsset && (
+              <div style={{ padding: '8px 12px', background: 'var(--bg3)', borderRadius: 8, fontSize: 13, fontWeight: 700, color: 'var(--ac)' }}>{selectedAsset.ticker} — {selectedAsset.name}</div>
+            )}
+            {[['Data de Pagamento','payment_date','date'],['Valor por Cota (R$)','amount_per_share','number'],['Cotas Detidas','quantity_held','number']].map(([label, key, type]) => (
+              <div key={key}>
+                <div style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 6 }}>{label}</div>
+                <input type={type} value={form[key]} onChange={e => setForm(f => ({ ...f, [key]: e.target.value }))}
+                  style={{ width: '100%', padding: '9px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }} />
+              </div>
+            ))}
+            {form.amount_per_share && form.quantity_held && (
+              <div style={{ padding: '10px 14px', background: 'rgba(34,197,94,.1)', borderRadius: 8, fontSize: 13, fontWeight: 700, color: 'var(--gr)' }}>
+                Total: {fmt.brl(parseFloat(form.amount_per_share) * parseFloat(form.quantity_held))}
+              </div>
+            )}
+            <Btn color="green" onClick={handleSave} disabled={saving || !selectedAsset || !form.amount_per_share || !form.quantity_held}>
+              {saving ? 'Salvando...' : editingId ? 'Salvar Alterações' : 'Lançar Provento'}
             </Btn>
-            <Btn onClick={() => setTab('list')} color="ghost">Cancelar</Btn>
           </div>
         </Card>
-      )}
-
-      {tab === 'balances' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
-          {divBalances.filter(d => d.available_balance > 0).map(d => (
-            <Card key={d.asset_id}>
-              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 6 }}>{d.ticker}</div>
-              <div style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 4 }}>Total recebido</div>
-              <div style={{ fontSize: 14, color: 'var(--tx2)', marginBottom: 8 }}>{fmt.brl(d.total_received)}</div>
-              <div style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 4 }}>Saldo disponível</div>
-              <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--am)' }}>{fmt.brl(d.available_balance)}</div>
-            </Card>
-          ))}
-        </div>
       )}
     </div>
   )
 }
-
-// ── CENÁRIO ECONÔMICO ─────────────────────────────────────
-
-// ── GUIA / WIKI ───────────────────────────────────────────
-const GUIDE = [
-  {
-    title: 'PM — Preço Médio',
-    content: 'O Preço Médio (PM) é calculado pela média ponderada de todas as compras de um ativo, sem descontar proventos. Ex: comprou 10 ações a R$10 e depois mais 10 a R$12 → PM = R$11.',
-  },
-  {
-    title: 'PMP — Preço Médio do Bolso',
-    content: 'O PMP (Preço Médio do Bolso) desconta do custo real os proventos que você utilizou para comprar mais ações. É o quanto você de fato tirou do seu dinheiro para montar a posição. Ex: comprou 1 ação a R$10, mas usou R$2 de dividendos → PMP = R$8.',
-  },
-  {
-    title: 'Número Mágico',
-    content: 'Indica quantas cotas você precisa ter para que 1 pagamento de dividendo seja suficiente para comprar mais 1 cota. Fórmula: Preço da ação ÷ Dividendo por cota. Ex: MXRF11 a R$9,87 pagando R$0,08/cota → Número Mágico = 124 cotas.',
-  },
-  {
-    title: 'Saldo de Proventos',
-    content: 'Pool acumulado de proventos recebidos que ainda não foram utilizados em compras. Cada vez que você registra uma compra e informa que usou proventos, esse saldo diminui. Pode vir de qualquer ativo da carteira.',
-  },
-  {
-    title: 'C20A — Carteira dos 20 Ativos',
-    content: 'Estratégia pessoal de aposentadoria com no máximo 20 ativos escolhidos, cada um com meta de gerar R$500 a R$1.000/mês em proventos. O sistema calcula quantas cotas você precisa ter de cada ativo para atingir essa meta, com base no histórico de dividendos do ano corrente.',
-  },
-  {
-    title: 'Balanceamento por Idade',
-    content: 'Regra sugerida: sua % em Renda Fixa deve ser próxima à sua idade. O restante é dividido entre FIIs e Renda Variável. Ex: 35 anos → 35% RF, ~32% FII, ~33% RV. Você pode personalizar esses percentuais nas configurações.',
-  },
-  {
-    title: 'Badge de Atratividade',
-    content: 'Indicador automático baseado em 4 critérios: P/L abaixo de 12x, P/VP abaixo de 1,2x, Dividend Yield acima de 6%, e preço abaixo da Média Móvel de 200 dias. 2 critérios = "Atenção" (amarelo). 3 ou mais = "Atraente" (verde). Passe o mouse sobre o badge para ver os critérios atendidos.',
-  },
-  {
-    title: 'P/L — Preço sobre Lucro',
-    content: 'Indica quantos anos de lucro seriam necessários para recuperar o investimento. P/L abaixo de 12x é considerado atraente. Não se aplica a FIIs e criptomoedas.',
-  },
-  {
-    title: 'P/VP — Preço sobre Valor Patrimonial',
-    content: 'Compara o preço de mercado com o valor patrimonial por cota. P/VP abaixo de 1 significa que você está pagando menos que o patrimônio real — considerado atraente. Muito relevante para FIIs.',
-  },
-  {
-    title: 'DY — Dividend Yield',
-    content: 'Percentual de proventos pagos nos últimos 12 meses em relação ao preço atual. DY acima de 6% é considerado interessante no InvestHub. Fórmula: (Proventos 12m ÷ Preço atual) × 100.',
-  },
-  {
-    title: 'MM200 — Média Móvel de 200 dias',
-    content: 'Indicador técnico que representa o preço médio das últimas 200 pregões. Preço abaixo da MM200 pode indicar que o ativo está descontado historicamente — um dos critérios do badge de atratividade.',
-  },
-  {
-    title: 'Watchlist',
-    content: 'Lista de ativos que você quer acompanhar sem necessariamente ter na carteira. Ideal para monitorar pontos de entrada. Você pode converter um ativo da watchlist em compra direto pela interface.',
-  },
-]
 
 export function Guia() {
   const [open, setOpen] = useState(null)

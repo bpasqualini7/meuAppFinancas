@@ -84,6 +84,16 @@ export const getDividendBalances = async (userId) => {
   return data
 }
 
+export const deleteDividend = async (id) => {
+  const { error } = await supabase.from('dividends').delete().eq('id', id)
+  if (error) throw error
+}
+
+export const updateDividend = async (id, payload) => {
+  const { error } = await supabase.from('dividends').update(payload).eq('id', id)
+  if (error) throw error
+}
+
 export const insertDividend = async (payload) => {
   const { data, error } = await supabase
     .from('dividends')
