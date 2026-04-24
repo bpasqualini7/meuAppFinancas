@@ -10,6 +10,10 @@ function parseInterNota(text) {
   const ops = []
   const simpleBr = (v) => parseFloat(String(v).replace(/\./, '').replace(',', '.'))
 
+  // Número da nota
+  const noteNumMatch = text.match(/Nr\.?\s*nota\s*(\d+)/)
+  const noteNumber = noteNumMatch ? noteNumMatch[1] : null
+
   // Data do pregão
   const dateMatch = text.match(/Data\s*prega[oõ]\s*(\d{2}\/\d{2}\/\d{4})/)
   const pregaoDate = dateMatch
@@ -45,7 +49,7 @@ function parseInterNota(text) {
     })
   }
 
-  return { ops, pregaoDate }
+  return { ops, pregaoDate, noteNumber }
 }
 
 // ── Mapear nome da nota para ticker ───────────────────────
@@ -96,6 +100,8 @@ export default function ImportarNota({ onNavigate }) {
   const [importCount, setImportCount] = useState(0)
   const [selected, setSelected] = useState({})
   const [filesInfo, setFilesInfo] = useState([])  // info dos arquivos processados
+  const [manualTickers, setManualTickers] = useState({})  // index -> ticker manual
+  const [duplicates, setDuplicates] = useState([])  // notas já importadas
 
   const extractTextFromPDF = async (file) => {
     const arrayBuffer = await file.arrayBuffer()
@@ -123,19 +129,33 @@ export default function ImportarNota({ onNavigate }) {
     const pdfs = Array.from(files).filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'))
     if (pdfs.length === 0) { setError('Selecione arquivos PDF válidos.'); return }
     setLoading(true); setError(null)
-    const allOps = [], infos = []
+    const allOps = [], infos = [], dups = []
     let debugText = null
+
+    // Verificar notas já importadas
+    const { data: importedNotes } = await supabase
+      .from('imported_notes')
+      .select('note_number, note_date')
+      .eq('user_id', user.id)
+    const importedSet = new Set((importedNotes || []).map(n => n.note_number))
 
     for (const file of pdfs) {
       try {
         const fullText = await extractTextFromPDF(file)
-        const { ops: parsed, pregaoDate: date } = parseInterNota(fullText)
+        const { ops: parsed, pregaoDate: date, noteNumber } = parseInterNota(fullText)
+
+        // Verificar duplicata
+        if (noteNumber && importedSet.has(noteNumber)) {
+          dups.push(file.name)
+          infos.push({ name: file.name, noteNumber, error: `Nota #${noteNumber} já importada anteriormente` })
+          continue
+        }
         if (parsed.length === 0) { debugText = fullText.substring(0, 2000); infos.push({ name: file.name, error: 'Sem operações detectadas' }); continue }
         const resolved = await Promise.all(parsed.map(async op => {
           const asset = await resolveTicker(op.description)
           return { ...op, _asset: asset, _ticker: asset?.ticker || null, _resolved: !!asset }
         }))
-        infos.push({ name: file.name, date, count: resolved.length })
+        infos.push({ name: file.name, date, count: resolved.length, noteNumber })
         allOps.push(...resolved)
       } catch (e) { infos.push({ name: file.name, error: e.message }) }
     }
@@ -144,7 +164,7 @@ export default function ImportarNota({ onNavigate }) {
       setError(debugText ? 'Texto extraído (debug):\n\n' + debugText : 'Nenhuma operação encontrada.')
       setLoading(false); return
     }
-    setFilesInfo(infos); setOps(allOps)
+    setDuplicates(dups); setFilesInfo(infos); setOps(allOps)
     setSelected(Object.fromEntries(allOps.map((_, i) => [i, true])))
     setStep('review'); setLoading(false)
   }
@@ -152,9 +172,27 @@ export default function ImportarNota({ onNavigate }) {
     const handleImport = async () => {
     setStep('importing')
     let count = 0
+    // Registrar notas como importadas
+    for (const info of filesInfo) {
+      if (info.noteNumber && !info.error) {
+        await supabase.from('imported_notes').upsert({
+          user_id: user.id,
+          note_number: info.noteNumber,
+          note_date: info.date,
+          broker: 'inter',
+          ops_count: info.count,
+        }, { onConflict: 'user_id,note_number,broker' }).then(() => {})
+      }
+    }
     for (let i = 0; i < ops.length; i++) {
       if (!selected[i]) continue
-      const op = ops[i]
+      let op = ops[i]
+      // Usar ticker manual se fornecido e não resolvido automaticamente
+      if (!op._resolved && manualTickers[i]) {
+        const ticker = manualTickers[i].trim()
+        let { data: existing } = await supabase.from('assets').select('id,ticker,name,asset_class').eq('ticker', ticker).single().catch(() => ({ data: null }))
+        if (existing) op = { ...op, _asset: existing, _resolved: true }
+      }
       if (!op._asset) continue
       try {
         const assetId = await ensureAsset({ ...op._asset, _fromBrapi: false })
@@ -278,8 +316,36 @@ export default function ImportarNota({ onNavigate }) {
                   </div>
                   <div style={{ fontSize: 11, color: 'var(--tx3)', marginTop: 2 }}>
                     {op.quantity} un. × {fmt.brl(op.unit_price)}
-                    {!op._resolved && ' · Ticker não encontrado — será ignorado'}
                   </div>
+                  {!op._resolved && (
+                    <div style={{ display: 'flex', gap: 6, marginTop: 6 }} onClick={e => e.stopPropagation()}>
+                      <input
+                        value={manualTickers[i] || ''}
+                        onChange={e => setManualTickers(t => ({ ...t, [i]: e.target.value.toUpperCase() }))}
+                        placeholder="Digite o ticker (ex: KNRI11)"
+                        style={{ flex: 1, padding: '5px 10px', borderRadius: 7, border: '1px solid var(--bd)', background: 'var(--bg2)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit' }}
+                      />
+                      {manualTickers[i]?.length >= 4 && (
+                        <button onClick={async (e) => {
+                          e.stopPropagation()
+                          const ticker = manualTickers[i].trim()
+                          // Buscar ou criar o ativo
+                          let { data: existing } = await supabase.from('assets').select('id,ticker,name,asset_class').eq('ticker', ticker).single()
+                          if (!existing) {
+                            const { data: created } = await supabase.from('assets').insert({ ticker, name: ticker, asset_class: ticker.endsWith('11') ? 'fii' : 'stock_br' }).select().single()
+                            existing = created
+                          }
+                          if (existing) {
+                            const newOps = [...ops]
+                            newOps[i] = { ...newOps[i], _ticker: ticker, _asset: existing, _resolved: true }
+                            setOps(newOps)
+                          }
+                        }} style={{ padding: '5px 12px', borderRadius: 7, border: 'none', background: 'var(--ac)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 700 }}>
+                          ✓
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Valor */}
@@ -290,7 +356,13 @@ export default function ImportarNota({ onNavigate }) {
             ))}
           </div>
 
-          {ops.some(op => !op._resolved) && (
+          {duplicates.length > 0 && (
+            <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(59,130,246,.1)', border: '1px solid rgba(59,130,246,.3)', fontSize: 12, color: 'var(--ac)' }}>
+              ⟳ {duplicates.length} nota{duplicates.length !== 1 ? 's' : ''} ignorada{duplicates.length !== 1 ? 's' : ''} por já ter sido importada anteriormente.
+            </div>
+          )}
+
+      {ops.some(op => !op._resolved) && (
             <div style={{ padding: '10px 14px', borderRadius: 10, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', fontSize: 12, color: 'var(--am)' }}>
               ⚠ Alguns tickers não foram identificados automaticamente. Eles serão ignorados na importação.
               Você pode adicioná-los manualmente pelo Extrato depois.
