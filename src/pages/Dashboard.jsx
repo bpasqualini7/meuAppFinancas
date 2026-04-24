@@ -7,15 +7,17 @@ function MacroStrip({ macro }) {
   if (!macro) return null
   const fmtPct = (v) => v == null ? '' : `${v >= 0 ? '+' : ''}${Number(v).toFixed(2)}%`
   const fmtPctPlain = (v) => v == null ? '—' : `${Number(v).toFixed(2)}%`
+  const selicReal = macro.selic && macro.ipca12 ? (macro.selic - macro.ipca12).toFixed(2) : null
   const indicators = [
-    { key: 'selic_meta', label: 'SELIC Meta', value: fmtPctPlain(macro.selicMeta), sub: null, change: null, accent: 'var(--ac2)' },
-    { key: 'selic', label: 'SELIC Over', value: fmtPctPlain(macro.selic), sub: null, change: null, accent: 'var(--ac2)' },
-    { key: 'cdi', label: 'CDI a.a.', value: fmtPctPlain(macro.cdi), sub: null, change: null, accent: '#a78bfa' },
-    macro.ipca12 != null && { key: 'ipca', label: 'IPCA 12m', value: fmtPctPlain(macro.ipca12), sub: macro.selic && macro.ipca12 ? `Real: ${(macro.selic - macro.ipca12).toFixed(2)}%` : null, change: null, accent: '#fb923c' },
-    macro.ibov && { key: 'ibov', label: 'IBOV', value: Number(macro.ibov.price).toLocaleString('pt-BR', { maximumFractionDigits: 0 }), sub: fmtPct(macro.ibov.change_pct), change: macro.ibov.change_pct, accent: '#4ade80' },
-    macro.sp500 && { key: 'sp500', label: 'S&P 500', value: Number(macro.sp500.price).toLocaleString('pt-BR', { maximumFractionDigits: 0 }), sub: fmtPct(macro.sp500.change_pct), change: macro.sp500.change_pct, accent: '#60a5fa' },
-    macro.dolar != null && { key: 'dolar', label: 'USD/BRL', value: `R$\u00a0${Number(macro.dolar).toFixed(3)}`, sub: null, change: null, accent: '#34d399' },
-    macro.btc && { key: 'btc', label: 'BTC', value: `R$\u00a0${Number(macro.btc.price_brl).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`, sub: fmtPct(macro.btc.change_pct), change: macro.btc.change_pct, accent: '#f59e0b' },
+    { key: 'selic_meta', label: 'SELIC Meta', value: fmtPctPlain(macro.selicMeta), sub: null, change: null, accent: 'var(--ac2)', tooltip: 'Taxa básica de juros definida pelo Copom. Referência para toda a economia.' },
+    { key: 'selic', label: 'SELIC Over', value: fmtPctPlain(macro.selic), sub: null, change: null, accent: 'var(--ac2)', tooltip: 'Taxa SELIC efetiva diária (Over). Base para CDBs e Tesouro Selic.' },
+    { key: 'cdi', label: 'CDI a.a.', value: fmtPctPlain(macro.cdi), sub: null, change: null, accent: '#a78bfa', tooltip: 'Certificado de Depósito Interbancário. Referência para renda fixa — CDBs, LCIs e LCAs.' },
+    macro.ipca12 != null && { key: 'ipca', label: 'IPCA 12m', value: fmtPctPlain(macro.ipca12), sub: null, change: null, accent: '#fb923c', tooltip: 'Inflação oficial do Brasil (IPCA) acumulada nos últimos 12 meses.' },
+    selicReal && { key: 'selic_real', label: 'Selic Real', value: `${selicReal}%`, sub: null, change: null, accent: '#34d399', tooltip: 'SELIC Over menos IPCA 12m — ganho real acima da inflação.' },
+    macro.ibov && { key: 'ibov', label: 'IBOV', value: Number(macro.ibov.price).toLocaleString('pt-BR', { maximumFractionDigits: 0 }), sub: fmtPct(macro.ibov.change_pct), change: macro.ibov.change_pct, accent: '#4ade80', tooltip: 'Índice Bovespa — principal índice da bolsa brasileira, via ETF BOVA11.' },
+    macro.sp500 && { key: 'sp500', label: 'S&P 500', value: Number(macro.sp500.price).toLocaleString('pt-BR', { maximumFractionDigits: 0 }), sub: fmtPct(macro.sp500.change_pct), change: macro.sp500.change_pct, accent: '#60a5fa', tooltip: 'Índice das 500 maiores empresas dos EUA, via ETF IVVB11 em BRL.' },
+    macro.dolar != null && { key: 'dolar', label: 'USD/BRL', value: `R$\u00a0${Number(macro.dolar).toFixed(3)}`, sub: null, change: null, accent: '#34d399', tooltip: 'Taxa de câmbio Dólar/Real — fonte: Banco Central do Brasil.' },
+    macro.btc && { key: 'btc', label: 'BTC', value: `R$\u00a0${Number(macro.btc.price_brl).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}`, sub: fmtPct(macro.btc.change_pct), change: macro.btc.change_pct, accent: '#f59e0b', tooltip: 'Bitcoin em reais — fonte: CoinGecko.' },
   ].filter(Boolean)
   const updatedTime = macro.updatedAt ? new Date(macro.updatedAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) : null
   return (
@@ -27,8 +29,11 @@ function MacroStrip({ macro }) {
       <div style={{ display: 'flex', overflowX: 'auto', padding: '10px 6px 12px', scrollbarWidth: 'none', msOverflowStyle: 'none', WebkitOverflowScrolling: 'touch' }}>
         {indicators.map((ind, i) => (
           <div key={ind.key} style={{ display: 'flex', flexShrink: 0, alignItems: 'center' }}>
-            <div style={{ padding: '8px 10px', minWidth: 88, textAlign: 'center' }}>
-              <div style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, marginBottom: 4 }}>{ind.label}</div>
+            <div title={ind.tooltip || ''} style={{ padding: '8px 10px', minWidth: 88, textAlign: 'center', cursor: ind.tooltip ? 'help' : 'default' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3, marginBottom: 4 }}>
+                <span style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700 }}>{ind.label}</span>
+                {ind.tooltip && <span style={{ fontSize: 9, color: 'var(--tx3)', lineHeight: 1, opacity: 0.7 }}>ⓘ</span>}
+              </div>
               <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--tx)', lineHeight: 1, marginBottom: ind.sub ? 3 : 0 }}>{ind.value}</div>
               {ind.sub && <div style={{ fontSize: 11, fontWeight: 600, color: ind.change != null ? (ind.change >= 0 ? 'var(--gr)' : 'var(--rd)') : 'var(--tx3)' }}>{ind.sub}</div>}
               <div style={{ height: 2, borderRadius: 1, background: ind.accent, marginTop: 6, opacity: 0.7 }} />
@@ -103,8 +108,8 @@ export default function Dashboard() {
   const rfP = totalP ? ((byClass.fixed_income || 0) / totalP) * 100 : 0
   const fiiP = totalP ? ((byClass.fii || 0) / totalP) * 100 : 0
   const rvP = totalP ? (((byClass.stock_br || 0) + (byClass.stock_us || 0) + (byClass.crypto || 0)) / totalP) * 100 : 0
+  // Ações = stock_br + stock_us + crypto (sem FII — FII tem linha própria)
   const monthly = portfolio.reduce((s, a) => s + (a.estimated_monthly_dividend_per_share || 0) * a.quantity, 0)
-  const selicReal = macro?.selic && macro?.ipca12 ? macro.selic - macro.ipca12 : null
 
   const handleDragStart = (i) => { dragFrom.current = i }
   const handleDragOver = (i) => { }
@@ -122,10 +127,9 @@ export default function Dashboard() {
     kpis: (
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10 }}>
         <KPI label="Patrimônio Total" value={fmt.brl(totalP)} sub={`Custo: ${fmt.brl(totalC)}`} />
-        <KPI label="Retorno" value={fmt.brl(ret)} sub={fmt.pct(retPct)} color={ret >= 0 ? 'var(--gr)' : 'var(--rd)'} />
-        <KPI label="Dividendos/mês" value={fmt.brl(monthly)} sub="Estimado ano corrente" />
-        {macro && <KPI label="Selic" value={`${fmt.num(macro.selic, 2)}%`} sub={selicReal ? `Real: ${fmt.num(selicReal, 2)}%` : 'a.a.'} />}
-        {macro?.dolar && <KPI label="USD/BRL" value={fmt.brl(macro.dolar)} sub="Banco Central" />}
+        <KPI label="Retorno Total" value={fmt.brl(ret)} sub={fmt.pct(retPct)} color={ret >= 0 ? 'var(--gr)' : 'var(--rd)'} />
+        <KPI label="Dividendos/mês" value={fmt.brl(monthly)} sub="Estimado (proventos cadastrados)" />
+        <KPI label="Ativos na carteira" value={portfolio.length} sub={`${portfolio.filter(a=>a.asset_class==='fii').length} FIIs · ${portfolio.filter(a=>a.asset_class==='stock_br').length} Ações`} />
       </div>
     ),
     allocation: (
@@ -152,10 +156,14 @@ export default function Dashboard() {
           <p style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 14 }}>Para {age} anos: RF {rfT.toFixed(0)}% / FII {fiiT.toFixed(0)}% / RV {rvT.toFixed(0)}%</p>
           <BalBar label="Renda Fixa" current={rfP} target={rfT} color="var(--ac2)" />
           <BalBar label="FIIs" current={fiiP} target={fiiT} color="var(--am)" />
-          <BalBar label="Renda Variável" current={rvP} target={rvT} color="var(--gr)" />
-          {Math.abs(rfP - rfT) > 5 && (
+          <BalBar label="Ações" current={rvP} target={rvT} color="var(--gr)" />
+          {(Math.abs(rfP - rfT) > 5 || Math.abs(fiiP - fiiT) > 5 || Math.abs(rvP - rvT) > 5) && (
             <div style={{ marginTop: 10, padding: '7px 10px', borderRadius: 8, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', fontSize: 11, color: 'var(--am)' }}>
-              ⚠ Carteira desbalanceada — reforce a Renda Fixa
+              ⚠ {Math.abs(rfP - rfT) > Math.abs(fiiP - fiiT) && Math.abs(rfP - rfT) > Math.abs(rvP - rvT)
+                ? 'Reforce a Renda Fixa'
+                : Math.abs(fiiP - fiiT) > Math.abs(rvP - rvT)
+                ? 'Reforce os FIIs'
+                : 'Reforce as Ações'} para balancear a carteira
             </div>
           )}
         </Card>

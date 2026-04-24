@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 7,
-  patch: 18,
+  patch: 19,
   date: '2026-04-20',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.7.19', date: '24/04/2026', desc: 'Dashboard: KPIs só carteira, Selic Real no macro strip, tooltips nos índices, Ações no balanceamento' },
   { version: 'v0.7.18', date: '22/04/2026', desc: 'Item 9: Watchlist com toggle ☰ lista / ⊞ cards, tabela com DY, P/L, P/VP, score colorido' },
   { version: 'v0.7.17', date: '22/04/2026', desc: 'Item 8: Parser PDF nota Inter — importação automática de operações, review antes de confirmar' },
   { version: 'v0.7.16', date: '21/04/2026', desc: 'Item 7: drag-and-drop no Dashboard — reordenar blocos, persistido no localStorage' },
