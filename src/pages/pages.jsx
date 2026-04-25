@@ -252,7 +252,7 @@ export function Portfolio() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Dashboard resumo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
         <KPI label="Patrimônio Total" value={fmt.brl(totalPatrimonio)} sub={`${portfolio.length} ativos`} color="var(--ac)" />
         <KPI label="Custo Total" value={fmt.brl(totalCusto)} sub="Investido" />
         <KPI label="Resultado" value={fmt.brl(totalResult)} sub={fmt.pct(totalResultPct)} color={totalResult >= 0 ? 'var(--gr)' : 'var(--rd)'} />

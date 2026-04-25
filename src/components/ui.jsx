@@ -18,9 +18,9 @@ export function Card({ children, style = {}, className = '' }) {
 // ── Stat KPI ──────────────────────────────────────────────
 export function KPI({ label, value, sub, color }) {
   return (
-    <Card>
-      <div style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, marginBottom: 6 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 800, color: color || 'var(--tx)', lineHeight: 1.1 }}>{value}</div>
+    <Card style={{ minWidth: 0 }}>
+      <div style={{ fontSize: 10, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 700, marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{label}</div>
+      <div style={{ fontSize: 'clamp(14px, 2.2vw, 22px)', fontWeight: 800, color: color || 'var(--tx)', lineHeight: 1.15, wordBreak: 'break-all' }}>{value}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--tx2)', marginTop: 4 }}>{sub}</div>}
     </Card>
   )
