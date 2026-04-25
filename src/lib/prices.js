@@ -29,17 +29,36 @@ const NO_MARKET_PRICE = (ticker) =>
 export const fetchBR = async (ticker) => {
   const hit = fromCache(ticker)
   if (hit) return hit
-  // Renda fixa manual — sem cotação de mercado
   if (NO_MARKET_PRICE(ticker)) return null
   try {
     const r = await fetch(`/api/quote?ticker=${ticker}`)
-    if (!r.ok) return null
-    const d = await r.json()
-    if (!d.price) return null
-    return cached(ticker, d)
+    if (r.ok) {
+      const d = await r.json()
+      if (d?.price) return cached(ticker, d)
+    }
+    // Fallback: tentar sem F final (SAPR11F → SAPR11)
+    const clean = ticker.replace(/F$/, '')
+    if (clean !== ticker) {
+      const r2 = await fetch(`/api/quote?ticker=${clean}`)
+      if (r2.ok) {
+        const d2 = await r2.json()
+        if (d2?.price) return cached(ticker, d2)
+      }
+    }
+    return null
   } catch {
     return null
   }
+}
+
+// Quais tickers falharam na última busca (para debug)
+export const FAILED_TICKERS = new Set()
+
+export const fetchBRWithLog = async (ticker) => {
+  const result = await fetchBR(ticker)
+  if (!result) FAILED_TICKERS.add(ticker)
+  else FAILED_TICKERS.delete(ticker)
+  return result
 }
 
 // Fetch crypto via CoinGecko (free, no key needed)

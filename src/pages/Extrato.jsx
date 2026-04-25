@@ -3,6 +3,27 @@ import { useApp, fmt, CLASS_LABEL } from '../lib/context'
 import { Card, Btn, Badge, AssetSearch, Input, Spinner, Empty } from '../components/ui'
 import { insertOperation, ensureAsset, getOperations, supabase } from '../lib/supabase'
 
+// ── Export CSV ────────────────────────────────────────────
+const exportCSV = (rows) => {
+  const headers = ['Data','Ticker','Tipo','Qtd','Preço Unit.','Total','Corretora','Fonte']
+  const lines = [headers.join(';')]
+  rows.forEach(op => {
+    const ticker = op.assets?.ticker || ''
+    lines.push([
+      op.op_date, ticker,
+      op.op_type === 'buy' ? 'Compra' : 'Venda',
+      op.quantity, String(op.unit_price).replace('.',','),
+      String(op.total_value).replace('.',','),
+      op.broker || '', op.source || ''
+    ].join(';'))
+  })
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url
+  a.download = `extrato_${new Date().toISOString().slice(0,10)}.csv`
+  a.click(); URL.revokeObjectURL(url)
+}
+
 // ── Op Form (compra ou venda) ─────────────────────────────
 function OpForm({ onSave, onCancel }) {
   const { user } = useApp()
@@ -273,6 +294,9 @@ export default function Extrato({ onNavigate }) {
         </Btn>
         <Btn onClick={() => onNavigate?.('importar')} color="ghost">
           📥 Importar PDF
+        </Btn>
+        <Btn onClick={() => exportCSV(filtered)} color="ghost" title="Exportar operações filtradas como CSV">
+          ↓ Exportar CSV
         </Btn>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: 16 }}>
           <span style={{ fontSize: 12, color: 'var(--gr)' }}>↑ Compras: <strong>{fmt.brl(totalCompras)}</strong></span>

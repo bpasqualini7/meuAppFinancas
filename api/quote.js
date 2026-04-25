@@ -68,7 +68,7 @@ export default async function handler(req, res) {
         })
       }
 
-      // 3. Tentar sem sufixo (MXRF em vez de MXRF11)
+      // 3. Tentar sem sufixo numérico como FII (MXRF em vez de MXRF11)
       if (tickerBase !== ticker) {
         const fiiRes2 = await fetch(`${BASE}/fiis/${tickerBase}`, { headers })
         if (fiiRes2.ok) {
@@ -81,6 +81,23 @@ export default async function handler(req, res) {
               high52: null, low52: null, source: 'bolsai_fii',
             })
           }
+        }
+        // 4. Tentar sem sufixo como ação
+        const [q2Res, s2Res] = await Promise.allSettled([
+          fetch(`${BASE}/stocks/${tickerBase}/quote`, { headers }),
+          fetch(`${BASE}/stocks/${tickerBase}/stats`, { headers }),
+        ])
+        const q2 = q2Res.status === 'fulfilled' && q2Res.value.ok ? await q2Res.value.json() : null
+        const s2 = s2Res.status === 'fulfilled' && s2Res.value.ok ? await s2Res.value.json() : null
+        if (q2?.ticker) {
+          return res.status(200).json({
+            price: q2.close,
+            change_pct: s2?.daily_change_pct || 0,
+            pl: null, pvp: null, dy: null,
+            high52: s2?.week_52_high || null,
+            low52: s2?.week_52_low || null,
+            source: 'bolsai_base',
+          })
         }
       }
     }

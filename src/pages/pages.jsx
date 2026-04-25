@@ -5,6 +5,33 @@ import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/co
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Spinner, Empty, Input, KPI } from '../components/ui'
 import { insertDividend, deleteDividend, updateDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A, getOperationsByAsset, getDividendsByAsset } from '../lib/supabase'
 
+// ── Export carteira CSV ───────────────────────────────────
+const exportCarteiraCsv = (portfolio, prices) => {
+  const headers = ['Ticker','Nome','Classe','Categoria','Qtd','PM','PMP Bolso','Cotação','Patrimônio','Resultado','Resultado%','Div.Acum']
+  const lines = [headers.join(';')]
+  portfolio.forEach(a => {
+    const price = prices[a.ticker]?.price || a.avg_price
+    const res = (price - a.avg_price) * a.quantity
+    const resPct = a.avg_price ? ((price - a.avg_price) / a.avg_price) * 100 : 0
+    lines.push([
+      a.ticker, a.name || '', a.asset_class || '', a.sector || '',
+      a.quantity,
+      String((a.avg_price||0).toFixed(2)).replace('.',','),
+      String((a.avg_price_net||0).toFixed(2)).replace('.',','),
+      String((price||0).toFixed(2)).replace('.',','),
+      String((price * a.quantity).toFixed(2)).replace('.',','),
+      String(res.toFixed(2)).replace('.',','),
+      String(resPct.toFixed(2)).replace('.',','),
+      String((a.cumulative_dividends||0).toFixed(2)).replace('.',','),
+    ].join(';'))
+  })
+  const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a'); a.href = url
+  a.download = `carteira_${new Date().toISOString().slice(0,10)}.csv`
+  a.click(); URL.revokeObjectURL(url)
+}
+
 // ── Logo do ativo via GitHub icones-b3 ───────────────────
 function AssetLogo({ ticker, size = 36 }) {
   const [err, setErr] = useState(false)
@@ -294,6 +321,7 @@ export function Portfolio() {
             <button key={v} onClick={() => setViewMode(v)} style={{ padding: '7px 11px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, background: viewMode === v ? 'var(--ac)' : 'var(--bg3)', color: viewMode === v ? 'white' : 'var(--tx3)' }}>{icon}</button>
           ))}
         </div>
+        <Btn color="ghost" onClick={() => exportCarteiraCsv(filtered, prices)} title="Exportar carteira como CSV">↓ CSV</Btn>
       </div>
 
       {filtered.length === 0 ? (
