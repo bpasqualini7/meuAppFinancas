@@ -204,6 +204,7 @@ function AssetDetailModal({ asset, prices, user, onClose }) {
 export function Portfolio() {
   const { user, portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
   const [filterClass, setFilterClass] = useState('all')
+  const [filterSector, setFilterSector] = useState('all')
   const [filterSearch, setFilterSearch] = useState('')
   const [sortBy, setSortBy] = useState('ticker')
   const [viewMode, setViewMode] = useState('table')
@@ -212,12 +213,16 @@ export function Portfolio() {
 
   if (loading) return <Spinner />
 
-  const classes = [...new Set(portfolio.map(a => a.asset_class))]
+  // classes únicas (deduplicado com Set)
+  const classes = [...new Set(portfolio.map(a => a.asset_class))].filter(Boolean)
+  // setores únicos (ordenados)
+  const sectors = [...new Set(portfolio.map(a => a.sector).filter(Boolean))].sort()
   const balances = {}
   divBalances.forEach(d => { balances[d.ticker] = d.available_balance })
 
   let filtered = portfolio
   if (filterClass !== 'all') filtered = filtered.filter(a => a.asset_class === filterClass)
+  if (filterSector !== 'all') filtered = filtered.filter(a => a.sector === filterSector)
   if (filterSearch.trim()) filtered = filtered.filter(a =>
     a.ticker.includes(filterSearch.toUpperCase()) || (a.name || '').toLowerCase().includes(filterSearch.toLowerCase())
   )
@@ -258,10 +263,24 @@ export function Portfolio() {
       {/* Filtros e controles */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
         <input value={filterSearch} onChange={e => setFilterSearch(e.target.value)} placeholder="Buscar ativo..." style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit', width: 140 }} />
-        <Btn color="ghost" onClick={() => setFilterClass('all')} style={{ border: filterClass === 'all' ? '2px solid var(--ac)' : undefined, fontSize: 12 }}>Todos</Btn>
+        {/* Filtro por classe */}
+        <Btn color="ghost" onClick={() => { setFilterClass('all'); setFilterSector('all') }} style={{ border: filterClass === 'all' && filterSector === 'all' ? '2px solid var(--ac)' : undefined, fontSize: 12 }}>Todos</Btn>
         {classes.map(c => (
-          <Btn key={c} color="ghost" onClick={() => setFilterClass(c)} style={{ border: filterClass === c ? '2px solid var(--ac)' : undefined, fontSize: 12 }}>{CLASS_LABEL[c] || c}</Btn>
+          <Btn key={c} color="ghost" onClick={() => { setFilterClass(c); setFilterSector('all') }} style={{ border: filterClass === c ? '2px solid var(--ac)' : undefined, fontSize: 12 }}>{CLASS_LABEL[c] || c}</Btn>
         ))}
+        {/* Separador visual */}
+        {sectors.length > 0 && <div style={{ width: 1, height: 22, background: 'var(--bd)', margin: '0 2px' }} />}
+        {/* Filtro por setor/categoria */}
+        {sectors.length > 0 && (
+          <select
+            value={filterSector}
+            onChange={e => { setFilterSector(e.target.value); setFilterClass('all') }}
+            style={{ padding: '6px 10px', borderRadius: 8, border: `1px solid ${filterSector !== 'all' ? 'var(--ac)' : 'var(--bd)'}`, background: 'var(--bg3)', color: filterSector !== 'all' ? 'var(--ac)' : 'var(--tx2)', fontSize: 12, fontFamily: 'inherit', fontWeight: filterSector !== 'all' ? 700 : 400, cursor: 'pointer' }}
+          >
+            <option value="all">Categoria...</option>
+            {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        )}
         <div style={{ flex: 1 }} />
         <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
           <span style={{ fontSize: 10, color: 'var(--tx3)', marginRight: 2 }}>Ordenar:</span>
@@ -328,7 +347,7 @@ export function Portfolio() {
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: 'var(--bg3)' }}>
-                {['Ativo', 'Classe', 'Qtd', 'PM', 'PMP 💡', 'Cotação', 'Resultado', 'Div. Acum.', 'Saldo Prov.', 'Nº Mágico', 'Oportunidade', 'C20A'].map(h => (
+                {['Ativo', 'Classe', 'Categoria', 'Qtd', 'PM', 'PMP 💡', 'Cotação', 'Resultado', 'Div. Acum.', 'Saldo Prov.', 'Nº Mágico', 'Oportunidade', 'C20A'].map(h => (
                   <th key={h} style={{ padding: '9px 11px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap', borderBottom: '1px solid var(--bd)' }}>{h}</th>
                 ))}
               </tr>
@@ -357,7 +376,15 @@ export function Portfolio() {
                         </div>
                       </td>
                       <td style={{ padding: '9px 11px' }}>
-                        <Badge color={a.asset_class === 'FII' ? 'fii' : a.asset_class === 'crypto' ? 'crypto' : 'green'}>{CLASS_LABEL[a.asset_class] || a.asset_class}</Badge>
+                        <Badge color={a.asset_class === 'fii' ? 'fii' : a.asset_class === 'crypto' ? 'crypto' : a.asset_class === 'stock_us' ? 'blue' : 'green'}>{CLASS_LABEL[a.asset_class] || a.asset_class}</Badge>
+                      </td>
+                      <td style={{ padding: '9px 11px' }}>
+                        {a.sector ? (
+                          <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 999, background: 'var(--bg3)', color: 'var(--tx2)', border: '1px solid var(--bd)', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                            onClick={e => { e.stopPropagation(); setFilterSector(a.sector); setFilterClass('all') }}>
+                            {a.sector}
+                          </span>
+                        ) : <span style={{ color: 'var(--tx3)' }}>—</span>}
                       </td>
                       <td style={{ padding: '9px 11px', fontWeight: 700 }}>{fmt.num(a.quantity, 0)}</td>
                       <td style={{ padding: '9px 11px', color: 'var(--tx2)' }}>{fmt.brl(a.avg_price)}</td>
@@ -389,7 +416,7 @@ export function Portfolio() {
                     </tr>
                     {isExpanded && (
                       <tr style={{ borderBottom: '1px solid var(--bd)' }}>
-                        <td colSpan={12} style={{ padding: '0 0 12px 0', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
+                        <td colSpan={13} style={{ padding: '0 0 12px 0', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
                           <div style={{ margin: '0 11px', padding: 14, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
                             <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Resumo — {a.ticker}</div>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 7, marginBottom: 12 }}>
