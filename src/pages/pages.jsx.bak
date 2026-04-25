@@ -1,334 +1,43 @@
 // ── PORTFOLIO ─────────────────────────────────────────────
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import React from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR, getMagicNumber } from '../lib/context'
 import { Card, Btn, Badge, AttrBadge, AssetSearch, Spinner, Empty, Input, KPI } from '../components/ui'
-import { insertDividend, deleteDividend, updateDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A, getOperationsByAsset, getDividendsByAsset } from '../lib/supabase'
-
-// ── Logo do ativo via GitHub icones-b3 ───────────────────
-function AssetLogo({ ticker, size = 36 }) {
-  const [err, setErr] = useState(false)
-  if (err) return (
-    <div style={{ width: size, height: size, borderRadius: 7, background: 'var(--bg4,var(--bg3))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.33, fontWeight: 800, color: 'var(--tx3)', flexShrink: 0, border: '1px solid var(--bd)' }}>
-      {ticker.slice(0, 2)}
-    </div>
-  )
-  // Remove trailing digits for logo lookup (MXRF11 → MXRF11, BBAS3 → BBAS3)
-  return (
-    <img
-      src={`https://raw.githubusercontent.com/thefintz/icones-b3/main/icones/${ticker}.png`}
-      alt={ticker}
-      onError={() => setErr(true)}
-      style={{ width: size, height: size, borderRadius: 7, objectFit: 'contain', background: 'var(--bg3)', flexShrink: 0, border: '1px solid var(--bd)' }}
-    />
-  )
-}
-
-// ── Modal extrato completo por ativo ─────────────────────
-function AssetDetailModal({ asset, prices, user, onClose }) {
-  const [ops, setOps] = useState([])
-  const [divs, setDivs] = useState([])
-  const [loadingDetail, setLoadingDetail] = useState(true)
-  const p = prices[asset.ticker]
-  const price = p?.price || asset.avg_price
-
-  useEffect(() => {
-    if (!asset || !user) return
-    setLoadingDetail(true)
-    Promise.all([
-      getOperationsByAsset(user.id, asset.asset_id),
-      getDividendsByAsset(user.id, asset.asset_id),
-    ]).then(([opsData, divsData]) => {
-      setOps(opsData || [])
-      setDivs(divsData || [])
-    }).finally(() => setLoadingDetail(false))
-  }, [asset.asset_id])
-
-  // PMP acumulado linha a linha
-  let runQty = 0, runCost = 0
-  const opsWithPmp = ops.map(op => {
-    if (op.op_type === 'buy') {
-      runCost += op.total_value; runQty += op.quantity
-    } else {
-      runCost -= (runQty > 0 ? (runCost / runQty) : 0) * op.quantity
-      runQty = Math.max(0, runQty - op.quantity)
-    }
-    return { ...op, pmpAfter: runQty > 0 ? runCost / runQty : 0, qtyAfter: runQty }
-  })
-
-  const totalDivs = divs.reduce((s, d) => s + (d.total_amount || 0), 0)
-  const res = (price - asset.avg_price) * asset.quantity
-  const resPct = asset.avg_price ? ((price - asset.avg_price) / asset.avg_price) * 100 : 0
-
-  return (
-    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.72)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 18, width: '100%', maxWidth: 700, maxHeight: '92vh', overflow: 'auto', boxShadow: '0 24px 60px rgba(0,0,0,.6)', display: 'flex', flexDirection: 'column' }}>
-        {/* Header sticky */}
-        <div style={{ padding: '18px 20px 14px', borderBottom: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', position: 'sticky', top: 0, background: 'var(--bg2)', zIndex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <AssetLogo ticker={asset.ticker} size={42} />
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                <span style={{ fontWeight: 900, fontSize: 20 }}>{asset.ticker}</span>
-                <Badge color={asset.asset_class === 'FII' ? 'fii' : 'green'}>{CLASS_LABEL[asset.asset_class] || asset.asset_class}</Badge>
-              </div>
-              <div style={{ fontSize: 11, color: 'var(--tx3)' }}>{asset.name}{asset.sector ? ` · ${asset.sector}` : ''}</div>
-            </div>
-          </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: 'var(--tx3)', cursor: 'pointer', fontSize: 22, padding: 4, lineHeight: 1 }}>✕</button>
-        </div>
-
-        <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {/* KPIs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 7 }}>
-            {[
-              ['Qtd. atual', fmt.num(asset.quantity, 0) + ' cotas', 'var(--tx)'],
-              ['Cotação', fmt.brl(price), 'var(--tx)'],
-              ['Patrimônio', fmt.brl(price * asset.quantity), 'var(--ac)'],
-              ['PM', fmt.brl(asset.avg_price), 'var(--tx2)'],
-              ['PMP (bolso)', fmt.brl(asset.avg_price_net || asset.avg_price), 'var(--gr)'],
-              ['Resultado', fmt.brl(res), res >= 0 ? 'var(--gr)' : 'var(--rd)'],
-              ['Retorno', fmt.pct(resPct), resPct >= 0 ? 'var(--gr)' : 'var(--rd)'],
-              ['Div. recebidos', fmt.brl(totalDivs), 'var(--ac2)'],
-            ].map(([l, v, c]) => (
-              <div key={l} style={{ background: 'var(--bg3)', borderRadius: 9, padding: '8px 10px' }}>
-                <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 2 }}>{l}</div>
-                <div style={{ fontWeight: 800, fontSize: 12, color: c }}>{v}</div>
-              </div>
-            ))}
-          </div>
-
-          {loadingDetail ? (
-            <div style={{ textAlign: 'center', padding: 24 }}><Spinner /></div>
-          ) : (
-            <>
-              {/* Operações */}
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-                  Operações ({ops.length})
-                </div>
-                {ops.length === 0 ? (
-                  <div style={{ color: 'var(--tx3)', fontSize: 12 }}>Nenhuma operação registrada.</div>
-                ) : (
-                  <div style={{ overflowX: 'auto', borderRadius: 9, border: '1px solid var(--bd)' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                      <thead>
-                        <tr style={{ background: 'var(--bg3)' }}>
-                          {['Data', 'Tipo', 'Qtd', 'P. Unit.', 'Total', 'PMP após', 'Saldo'].map(h => (
-                            <th key={h} style={{ padding: '6px 9px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {opsWithPmp.map((op, i) => (
-                          <tr key={op.id} style={{ borderBottom: i < opsWithPmp.length - 1 ? '1px solid var(--bd)' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
-                            <td style={{ padding: '6px 9px', color: 'var(--tx2)', whiteSpace: 'nowrap' }}>{fmt.date(op.op_date)}</td>
-                            <td style={{ padding: '6px 9px' }}>
-                              <span style={{ fontWeight: 700, fontSize: 10, padding: '2px 6px', borderRadius: 999, background: op.op_type === 'buy' ? 'rgba(34,197,94,.15)' : 'rgba(239,68,68,.15)', color: op.op_type === 'buy' ? 'var(--gr)' : 'var(--rd)' }}>
-                                {op.op_type === 'buy' ? '▲ Compra' : '▼ Venda'}
-                              </span>
-                            </td>
-                            <td style={{ padding: '6px 9px', fontWeight: 700 }}>{fmt.num(op.quantity, 0)}</td>
-                            <td style={{ padding: '6px 9px', color: 'var(--tx2)' }}>{fmt.brl(op.unit_price)}</td>
-                            <td style={{ padding: '6px 9px', fontWeight: 700, color: op.op_type === 'buy' ? 'var(--rd)' : 'var(--gr)' }}>
-                              {op.op_type === 'buy' ? '-' : '+'}{fmt.brl(op.total_value)}
-                            </td>
-                            <td style={{ padding: '6px 9px', color: 'var(--ac)', fontWeight: 700 }}>{fmt.brl(op.pmpAfter)}</td>
-                            <td style={{ padding: '6px 9px', color: 'var(--tx2)' }}>{fmt.num(op.qtyAfter, 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Dividendos */}
-              {divs.length > 0 && (
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
-                    Proventos ({divs.length}) · Total: <span style={{ color: 'var(--ac2)' }}>{fmt.brl(totalDivs)}</span>
-                  </div>
-                  <div style={{ overflowX: 'auto', borderRadius: 9, border: '1px solid var(--bd)' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
-                      <thead>
-                        <tr style={{ background: 'var(--bg3)' }}>
-                          {['Data', 'Total', 'Por Cota', 'Cotas'].map(h => (
-                            <th key={h} style={{ padding: '6px 9px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 9, textTransform: 'uppercase', borderBottom: '1px solid var(--bd)' }}>{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {divs.map((d, i) => (
-                          <tr key={d.id} style={{ borderBottom: i < divs.length - 1 ? '1px solid var(--bd)' : 'none', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
-                            <td style={{ padding: '6px 9px', color: 'var(--tx2)', whiteSpace: 'nowrap' }}>{fmt.date(d.payment_date)}</td>
-                            <td style={{ padding: '6px 9px', fontWeight: 800, color: 'var(--ac2)' }}>{fmt.brl(d.total_amount)}</td>
-                            <td style={{ padding: '6px 9px', color: 'var(--tx2)' }}>{fmt.brl(d.amount_per_share)}</td>
-                            <td style={{ padding: '6px 9px', color: 'var(--tx2)' }}>{fmt.num(d.quantity_held, 0)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              )}
-
-              {/* Indicadores de mercado */}
-              {p && (p.dy != null || p.pl != null || p.pvp != null) && (
-                <div>
-                  <div style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Indicadores de Mercado</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(105px, 1fr))', gap: 7 }}>
-                    {[
-                      p.dy != null && ['DY 12m', `${Number(p.dy).toFixed(1)}%`, p.dy > 6],
-                      p.pl != null && ['P/L', `${Number(p.pl).toFixed(1)}x`, p.pl < 12],
-                      p.pvp != null && ['P/VP', `${Number(p.pvp).toFixed(2)}x`, p.pvp < 1],
-                      p.high52 != null && ['Máx 52s', fmt.brl(p.high52), false],
-                      p.low52 != null && ['Mín 52s', fmt.brl(p.low52), false],
-                    ].filter(Boolean).map(([l, v, ok]) => (
-                      <div key={l} style={{ background: 'var(--bg3)', borderRadius: 9, padding: '8px 10px', border: ok ? '1px solid rgba(34,197,94,.25)' : '1px solid var(--bd)' }}>
-                        <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 2 }}>{l}</div>
-                        <div style={{ fontWeight: 800, fontSize: 13, color: ok ? 'var(--gr)' : 'var(--tx)' }}>{v}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
+import { insertDividend, deleteDividend, updateDividend, addToWatchlist, updateProfile, addToC20A, removeFromC20A } from '../lib/supabase'
 
 export function Portfolio() {
-  const { user, portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
-  const [filterClass, setFilterClass] = useState('all')
-  const [filterSearch, setFilterSearch] = useState('')
-  const [sortBy, setSortBy] = useState('ticker')
-  const [viewMode, setViewMode] = useState('table')
-  const [detailAsset, setDetailAsset] = useState(null)
+  const { portfolio, prices, divBalances, loading, refreshPortfolio } = useApp()
+  const [filter, setFilter] = useState('all')
   const [expandedTicker, setExpandedTicker] = useState(null)
 
   if (loading) return <Spinner />
 
   const classes = [...new Set(portfolio.map(a => a.asset_class))]
+  const filtered = portfolio.filter(a => filter === 'all' || a.asset_class === filter)
+
   const balances = {}
   divBalances.forEach(d => { balances[d.ticker] = d.available_balance })
 
-  let filtered = portfolio
-  if (filterClass !== 'all') filtered = filtered.filter(a => a.asset_class === filterClass)
-  if (filterSearch.trim()) filtered = filtered.filter(a =>
-    a.ticker.includes(filterSearch.toUpperCase()) || (a.name || '').toLowerCase().includes(filterSearch.toLowerCase())
-  )
-  filtered = [...filtered].sort((a, b) => {
-    const pa = prices[a.ticker]?.price || a.avg_price
-    const pb = prices[b.ticker]?.price || b.avg_price
-    if (sortBy === 'patrimonio') return (pb * b.quantity) - (pa * a.quantity)
-    if (sortBy === 'resultado') return ((pb - b.avg_price) * b.quantity) - ((pa - a.avg_price) * a.quantity)
-    if (sortBy === 'dividendos') return (b.cumulative_dividends || 0) - (a.cumulative_dividends || 0)
-    return a.ticker.localeCompare(b.ticker)
-  })
-
-  const totalPatrimonio = portfolio.reduce((s, a) => s + (prices[a.ticker]?.price || a.avg_price) * a.quantity, 0)
-  const totalCusto = portfolio.reduce((s, a) => s + a.avg_price * a.quantity, 0)
-  const totalResult = totalPatrimonio - totalCusto
-  const totalResultPct = totalCusto > 0 ? (totalResult / totalCusto) * 100 : 0
-  const totalDivs = portfolio.reduce((s, a) => s + (a.cumulative_dividends || 0), 0)
-  const totalSaldo = Object.values(balances).reduce((s, v) => s + v, 0)
-
-  const SortBtn = ({ id, label }) => (
-    <button onClick={() => setSortBy(id)} style={{ padding: '5px 10px', borderRadius: 6, border: `1px solid ${sortBy === id ? 'var(--ac)' : 'var(--bd)'}`, background: sortBy === id ? 'rgba(99,102,241,.15)' : 'transparent', color: sortBy === id ? 'var(--ac)' : 'var(--tx3)', fontSize: 11, fontWeight: sortBy === id ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit' }}>
-      {label}
-    </button>
-  )
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-
-      {/* Dashboard resumo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 10 }}>
-        <KPI label="Patrimônio Total" value={fmt.brl(totalPatrimonio)} sub={`${portfolio.length} ativos`} color="var(--ac)" />
-        <KPI label="Custo Total" value={fmt.brl(totalCusto)} sub="Investido" />
-        <KPI label="Resultado" value={fmt.brl(totalResult)} sub={fmt.pct(totalResultPct)} color={totalResult >= 0 ? 'var(--gr)' : 'var(--rd)'} />
-        <KPI label="Dividendos Acum." value={fmt.brl(totalDivs)} sub="Histórico total" color="var(--ac2)" />
-        <KPI label="Saldo Proventos" value={fmt.brl(totalSaldo)} sub="Disponível" color="var(--am)" />
-      </div>
-
-      {/* Filtros e controles */}
+      {/* Filtros de classe */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-        <input value={filterSearch} onChange={e => setFilterSearch(e.target.value)} placeholder="Buscar ativo..." style={{ padding: '7px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit', width: 140 }} />
-        <Btn color="ghost" onClick={() => setFilterClass('all')} style={{ border: filterClass === 'all' ? '2px solid var(--ac)' : undefined, fontSize: 12 }}>Todos</Btn>
+        <Btn color="ghost" onClick={() => setFilter('all')} style={{ border: filter === 'all' ? '2px solid var(--ac)' : undefined }}>Todos</Btn>
         {classes.map(c => (
-          <Btn key={c} color="ghost" onClick={() => setFilterClass(c)} style={{ border: filterClass === c ? '2px solid var(--ac)' : undefined, fontSize: 12 }}>{CLASS_LABEL[c] || c}</Btn>
+          <Btn key={c} color="ghost" onClick={() => setFilter(c)} style={{ border: filter === c ? '2px solid var(--ac)' : undefined }}>
+            {CLASS_LABEL[c]}
+          </Btn>
         ))}
-        <div style={{ flex: 1 }} />
-        <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-          <span style={{ fontSize: 10, color: 'var(--tx3)', marginRight: 2 }}>Ordenar:</span>
-          <SortBtn id="ticker" label="A-Z" />
-          <SortBtn id="patrimonio" label="Patrimônio" />
-          <SortBtn id="resultado" label="Resultado" />
-          <SortBtn id="dividendos" label="Dividendos" />
-        </div>
-        <div style={{ display: 'flex', border: '1px solid var(--bd)', borderRadius: 8, overflow: 'hidden' }}>
-          {[['table', '☰'], ['card', '⊞']].map(([v, icon]) => (
-            <button key={v} onClick={() => setViewMode(v)} style={{ padding: '7px 11px', border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontSize: 14, background: viewMode === v ? 'var(--ac)' : 'var(--bg3)', color: viewMode === v ? 'white' : 'var(--tx3)' }}>{icon}</button>
-          ))}
-        </div>
       </div>
 
       {filtered.length === 0 ? (
-        <Empty icon="◈" message="Nenhum ativo encontrado." />
-      ) : viewMode === 'card' ? (
-        /* Vista Cards */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
-          {filtered.map(a => {
-            const p = prices[a.ticker], price = p?.price || a.avg_price
-            const res = (price - a.avg_price) * a.quantity
-            return (
-              <Card key={a.asset_id} style={{ cursor: 'pointer', padding: 14 }} onClick={() => setDetailAsset(a)}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <AssetLogo ticker={a.ticker} size={38} />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 900, fontSize: 15 }}>{a.ticker}</div>
-                    <div style={{ fontSize: 10, color: 'var(--tx3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{a.name}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: 800, fontSize: 14 }}>{fmt.brl(price)}</div>
-                    {p?.change_pct != null && <div style={{ fontSize: 10, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)', fontWeight: 700 }}>{fmt.pct(p.change_pct)}</div>}
-                  </div>
-                </div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
-                  {[
-                    ['Patrimônio', fmt.brl(price * a.quantity), 'var(--tx)'],
-                    ['Resultado', fmt.brl(res), res >= 0 ? 'var(--gr)' : 'var(--rd)'],
-                    ['Qtd.', fmt.num(a.quantity, 0), 'var(--tx2)'],
-                    ['PMP', fmt.brl(a.avg_price_net || a.avg_price), 'var(--ac)'],
-                  ].map(([l, v, c]) => (
-                    <div key={l} style={{ background: 'var(--bg3)', borderRadius: 7, padding: '6px 9px' }}>
-                      <div style={{ fontSize: 9, color: 'var(--tx3)' }}>{l}</div>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: c }}>{v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap' }}>
-                    <Badge color={a.asset_class === 'FII' ? 'fii' : 'green'} style={{ fontSize: 9 }}>{CLASS_LABEL[a.asset_class] || a.asset_class}</Badge>
-                    {(a.cumulative_dividends || 0) > 0 && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: 'rgba(168,85,247,.15)', color: 'var(--ac2)', fontWeight: 700 }}>Div: {fmt.brl(a.cumulative_dividends)}</span>}
-                  </div>
-                  {a.c20a_included && <span style={{ fontSize: 9, padding: '2px 6px', borderRadius: 999, background: 'rgba(34,197,94,.15)', color: 'var(--gr)', fontWeight: 700 }}>C20A ✓</span>}
-                </div>
-              </Card>
-            )
-          })}
-        </div>
+        <Empty icon="◈" message="Nenhum ativo na carteira ainda. Registre operações no Extrato!" />
       ) : (
-        /* Vista Tabela */
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
               <tr style={{ background: 'var(--bg3)' }}>
-                {['Ativo', 'Classe', 'Qtd', 'PM', 'PMP 💡', 'Cotação', 'Resultado', 'Div. Acum.', 'Saldo Prov.', 'Nº Mágico', 'Oportunidade', 'C20A'].map(h => (
+                {['Ativo', 'Classe', 'Qtd', 'PM', 'PMP 💡', 'Cotação', 'Resultado', 'Div. Acum.', 'Saldo Prov.', 'Nº Mágico', 'Badge', 'C20A'].map(h => (
                   <th key={h} style={{ padding: '9px 11px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: '.05em', whiteSpace: 'nowrap', borderBottom: '1px solid var(--bd)' }}>{h}</th>
                 ))}
               </tr>
@@ -341,93 +50,94 @@ export function Portfolio() {
                 const magic = getMagicNumber(price, a.estimated_monthly_dividend_per_share)
                 const saldo = balances[a.ticker] || 0
                 const isExpanded = expandedTicker === a.ticker
-                const pmpVal = a.avg_price_net > 0 ? a.avg_price_net : a.avg_price
-                const pmpColor = a.avg_price_net > 0 ? 'var(--gr)' : 'var(--tx3)'
                 return (
                   <React.Fragment key={a.asset_id}>
-                    <tr onClick={() => setExpandedTicker(isExpanded ? null : a.ticker)}
-                      style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)', cursor: 'pointer' }}>
-                      <td style={{ padding: '9px 11px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                          <AssetLogo ticker={a.ticker} size={24} />
-                          <div>
-                            <div style={{ fontWeight: 800, color: 'var(--tx)' }}>{a.ticker}</div>
-                            <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{a.name}</div>
+                  <tr
+                    onClick={() => setExpandedTicker(isExpanded ? null : a.ticker)}
+                    style={{ borderBottom: isExpanded ? 'none' : '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)', cursor: 'pointer' }}>
+                    <td style={{ padding: '9px 11px' }}>
+                      <div style={{ fontWeight: 800, color: 'var(--tx)' }}>{a.ticker}</div>
+                      <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{a.name}</div>
+                    </td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <Badge color={a.asset_class === 'fii' ? 'fii' : a.asset_class === 'crypto' ? 'crypto' : 'green'}>
+                        {CLASS_LABEL[a.asset_class]}
+                      </Badge>
+                    </td>
+                    <td style={{ padding: '9px 11px', fontWeight: 700 }}>{fmt.num(a.quantity, 0)}</td>
+                    <td style={{ padding: '9px 11px', color: 'var(--tx2)' }}>{fmt.brl(a.avg_price)}</td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--gr)' }}>{fmt.brl(a.avg_price_net)}</div>
+                      <div style={{ fontSize: 9, color: 'var(--tx3)' }}>do bolso</div>
+                    </td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <div style={{ fontWeight: 800 }}>{fmt.brl(price)}</div>
+                      {p?.change_pct !== undefined && (
+                        <div style={{ fontSize: 10, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>
+                          {fmt.pct(p.change_pct)}
+                        </div>
+                      )}
+                    </td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <div style={{ fontWeight: 700, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.brl(res)}</div>
+                      <div style={{ fontSize: 10, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(resPct)}</div>
+                    </td>
+                    <td style={{ padding: '9px 11px', color: 'var(--ac2)', fontWeight: 700 }}>{fmt.brl(a.cumulative_dividends)}</td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <div style={{ fontWeight: 700, color: saldo > 0 ? 'var(--ac2)' : 'var(--tx3)' }}>{saldo > 0 ? fmt.brl(saldo) : '—'}</div>
+                    </td>
+                    <td style={{ padding: '9px 11px', color: 'var(--am)', fontWeight: 700 }}>
+                      {magic ? `${magic}x` : '—'}
+                    </td>
+                    <td style={{ padding: '9px 11px' }}><AttrBadge ticker={a.ticker} prices={prices} /></td>
+                    <td style={{ padding: '9px 11px' }}>
+                      <Badge color={a.c20a_included ? 'green' : 'accent'}>{a.c20a_included ? '✓' : '+'}</Badge>
+                    </td>
+                  </tr>
+                  {isExpanded && (
+                    <tr style={{ borderBottom: '1px solid var(--bd)' }}>
+                      <td colSpan={12} style={{ padding: '0 0 14px 0', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
+                        <div style={{ margin: '0 11px', padding: '14px', background: 'var(--bg3)', borderRadius: 10, border: '1px solid var(--bd)' }}>
+                          <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 12 }}>
+                            Detalhes — {a.ticker}
                           </div>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: 8 }}>
+                            {[
+                              ['Patrimônio', fmt.brl(price * a.quantity)],
+                              ['Custo total', fmt.brl(a.avg_price * a.quantity)],
+                              ['PM', fmt.brl(a.avg_price)],
+                              ['PMP (bolso)', fmt.brl(a.avg_price_net)],
+                              ['Cotação', fmt.brl(price)],
+                              ['Resultado', fmt.brl(res)],
+                              ['Retorno %', fmt.pct(resPct)],
+                              p?.dy != null && ['DY 12m', `${Number(p.dy).toFixed(1)}%`],
+                              p?.pl != null && ['P/L', `${Number(p.pl).toFixed(1)}x`],
+                              p?.pvp != null && ['P/VP', `${Number(p.pvp).toFixed(2)}x`],
+                              p?.high52 != null && ['Máx 52s', fmt.brl(p.high52)],
+                              p?.low52 != null && ['Mín 52s', fmt.brl(p.low52)],
+                            ].filter(Boolean).map(([label, value]) => (
+                              <div key={label} style={{ background: 'var(--bg2)', borderRadius: 8, padding: '8px 10px' }}>
+                                <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 3 }}>{label}</div>
+                                <div style={{ fontWeight: 700, fontSize: 13 }}>{value}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {p?.source && (
+                            <div style={{ marginTop: 10, fontSize: 10, color: 'var(--tx3)' }}>
+                              Fonte: {p.source} · {a.asset_class === 'fii' ? 'Fundo Imobiliário' : CLASS_LABEL[a.asset_class]}
+                              {a.sector && ` · ${a.sector}`}
+                            </div>
+                          )}
                         </div>
                       </td>
-                      <td style={{ padding: '9px 11px' }}>
-                        <Badge color={a.asset_class === 'FII' ? 'fii' : a.asset_class === 'crypto' ? 'crypto' : 'green'}>{CLASS_LABEL[a.asset_class] || a.asset_class}</Badge>
-                      </td>
-                      <td style={{ padding: '9px 11px', fontWeight: 700 }}>{fmt.num(a.quantity, 0)}</td>
-                      <td style={{ padding: '9px 11px', color: 'var(--tx2)' }}>{fmt.brl(a.avg_price)}</td>
-                      <td style={{ padding: '9px 11px' }}>
-                        <div style={{ fontWeight: 700, color: pmpColor }}>{fmt.brl(pmpVal)}</div>
-                        <div style={{ fontSize: 9, color: 'var(--tx3)' }}>do bolso</div>
-                      </td>
-                      <td style={{ padding: '9px 11px' }}>
-                        <div style={{ fontWeight: 800 }}>{fmt.brl(price)}</div>
-                        {p?.change_pct !== undefined && <div style={{ fontSize: 10, color: p.change_pct >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(p.change_pct)}</div>}
-                      </td>
-                      <td style={{ padding: '9px 11px' }}>
-                        {price !== a.avg_price ? (
-                          <>
-                            <div style={{ fontWeight: 700, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.brl(res)}</div>
-                            <div style={{ fontSize: 10, color: res >= 0 ? 'var(--gr)' : 'var(--rd)' }}>{fmt.pct(resPct)}</div>
-                          </>
-                        ) : <span style={{ color: 'var(--tx3)' }}>—</span>}
-                      </td>
-                      <td style={{ padding: '9px 11px', color: 'var(--ac2)', fontWeight: 700 }}>{(a.cumulative_dividends || 0) > 0 ? fmt.brl(a.cumulative_dividends) : '—'}</td>
-                      <td style={{ padding: '9px 11px' }}><div style={{ fontWeight: 700, color: saldo > 0 ? 'var(--ac2)' : 'var(--tx3)' }}>{saldo > 0 ? fmt.brl(saldo) : '—'}</div></td>
-                      <td style={{ padding: '9px 11px', color: 'var(--am)', fontWeight: 700 }}>{magic ? `${magic}x` : '—'}</td>
-                      <td style={{ padding: '9px 11px' }}><AttrBadge ticker={a.ticker} prices={prices} /></td>
-                      <td style={{ padding: '9px 11px' }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 999, background: a.c20a_included ? 'rgba(34,197,94,.15)' : 'rgba(100,116,139,.12)', color: a.c20a_included ? 'var(--gr)' : 'var(--tx3)' }}>
-                          {a.c20a_included ? '✓' : '—'}
-                        </span>
-                      </td>
                     </tr>
-                    {isExpanded && (
-                      <tr style={{ borderBottom: '1px solid var(--bd)' }}>
-                        <td colSpan={12} style={{ padding: '0 0 12px 0', background: i % 2 === 0 ? 'transparent' : 'var(--bg3)' }}>
-                          <div style={{ margin: '0 11px', padding: 14, background: 'var(--bg2)', borderRadius: 10, border: '1px solid var(--bd)' }}>
-                            <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>Resumo — {a.ticker}</div>
-                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 7, marginBottom: 12 }}>
-                              {[
-                                ['Patrimônio', fmt.brl(price * a.quantity)],
-                                ['Custo total', fmt.brl(a.avg_price * a.quantity)],
-                                p?.dy != null && ['DY 12m', `${Number(p.dy).toFixed(1)}%`],
-                                p?.pl != null && ['P/L', `${Number(p.pl).toFixed(1)}x`],
-                                p?.pvp != null && ['P/VP', `${Number(p.pvp).toFixed(2)}x`],
-                                p?.high52 != null && ['Máx 52s', fmt.brl(p.high52)],
-                                p?.low52 != null && ['Mín 52s', fmt.brl(p.low52)],
-                              ].filter(Boolean).map(([label, value]) => (
-                                <div key={label} style={{ background: 'var(--bg3)', borderRadius: 7, padding: '7px 9px' }}>
-                                  <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 2 }}>{label}</div>
-                                  <div style={{ fontWeight: 700, fontSize: 12 }}>{value}</div>
-                                </div>
-                              ))}
-                            </div>
-                            <Btn size="sm" color="accent" onClick={e => { e.stopPropagation(); setDetailAsset(a) }}>
-                              + Ver Extrato Completo
-                            </Btn>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
+                  )}
                   </React.Fragment>
                 )
               })}
             </tbody>
           </table>
-          <div style={{ padding: '8px 12px', fontSize: 11, color: 'var(--tx3)' }}>
-            {filtered.length} ativo{filtered.length !== 1 ? 's' : ''} · Clique na linha para expandir · "+ Ver Extrato Completo" abre o histórico detalhado
-          </div>
         </div>
-      )}
-
-      {detailAsset && (
-        <AssetDetailModal asset={detailAsset} prices={prices} user={user} onClose={() => setDetailAsset(null)} />
       )}
     </div>
   )

@@ -6,9 +6,9 @@
 
 export const VERSION = {
   major: 0,
-  minor: 7,
-  patch: 20,
-  date: '2026-04-20',
+  minor: 8,
+  patch: 0,
+  date: '2026-04-25',
   label: 'beta',
 }
 
@@ -17,7 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
-  { version: 'v0.7.20', date: '24/04/2026', desc: 'Proventos: CRUD completo, gráfico mensal, filtro, agrupado por ativo' },
+  { version: 'v0.8.0', date: '25/04/2026', desc: 'Carteira: dashboard KPIs, busca+filtros+ordenação, toggle tabela/cards, logos, Oportunidade, C20A (—/✓), modal extrato completo por ativo com ops+dividendos+PMP acumulado' },
   { version: 'v0.7.19', date: '24/04/2026', desc: 'Dashboard: KPIs só carteira, Selic Real no macro strip, tooltips nos índices, Ações no balanceamento' },
   { version: 'v0.7.18', date: '22/04/2026', desc: 'Item 9: Watchlist com toggle ☰ lista / ⊞ cards, tabela com DY, P/L, P/VP, score colorido' },
   { version: 'v0.7.17', date: '22/04/2026', desc: 'Item 8: Parser PDF nota Inter — importação automática de operações, review antes de confirmar' },

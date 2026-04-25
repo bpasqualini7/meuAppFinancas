@@ -299,3 +299,26 @@ export const upsertPriceCache = async (payload) => {
     .upsert(payload, { onConflict: 'ticker' })
   if (error) throw error
 }
+
+// ── Operations por ativo ──────────────────────────────────
+export const getOperationsByAsset = async (userId, assetId) => {
+  const { data, error } = await supabase
+    .from('operations')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('asset_id', assetId)
+    .order('op_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export const getDividendsByAsset = async (userId, assetId) => {
+  const { data, error } = await supabase
+    .from('dividends')
+    .select('*')
+    .eq('user_id', userId)
+    .eq('asset_id', assetId)
+    .order('payment_date', { ascending: false })
+  if (error) throw error
+  return data
+}
