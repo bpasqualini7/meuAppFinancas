@@ -322,3 +322,24 @@ export const getDividendsByAsset = async (userId, assetId) => {
   if (error) throw error
   return data
 }
+
+// ── Operações para gráfico de evolução (ordenadas ASC) ───
+export const getOperationsForChart = async (userId) => {
+  const { data, error } = await supabase
+    .from('operations')
+    .select('op_date, op_type, quantity, unit_price, total_value, assets(ticker, asset_class)')
+    .eq('user_id', userId)
+    .order('op_date', { ascending: true })
+  if (error) throw error
+  return data
+}
+
+export const getDividendsForChart = async (userId) => {
+  const { data, error } = await supabase
+    .from('dividends')
+    .select('payment_date, total_amount, assets(ticker, asset_class)')
+    .eq('user_id', userId)
+    .order('payment_date', { ascending: true })
+  if (error) throw error
+  return data
+}
