@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp, fmt, CLASS_LABEL } from '../lib/context'
 import { Card, KPI, Spinner, Empty } from '../components/ui'
 import { fetchNews } from '../lib/prices'
-import { getOperationsForChart, getDividendsForChart } from '../lib/supabase'
+import { getOperationsForChart, getDividendsForChart, getCriptoPositions, saveCriptoPositions } from '../lib/supabase'
+import { fetchAllCriptoPrices, fetchCriptoHistory, getCoinGeckoId } from '../lib/prices'
 
 // ── Paleta de linhas por classe ─────────────────────────
 const CLASS_COLORS = {
@@ -280,6 +281,425 @@ function PatrimonioChart({ months, series, divSeries, activeClasses, showDivs })
   )
 }
 
+// ── CRIPTO TAB ────────────────────────────────────────────
+// (imports centralizados no topo do arquivo)
+
+// Posições iniciais da carteira do usuário
+const DEFAULT_POSITIONS = [
+  { symbol: 'BTC',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'ETH',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'ADA',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'SOL',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'XRP',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'POL',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'LTC',  qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+  { symbol: 'LINK', qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
+]
+
+// ── Calcula gatilhos e sinais ─────────────────────────────
+function calcSignals(pos, price) {
+  if (!price || !pos.avgPrice) return null
+  const pct = ((price - pos.avgPrice) / pos.avgPrice) * 100
+  const refBuyPct = pos.refBuy ? ((pos.refBuy - price) / pos.refBuy) * 100 : null
+  const refSellPct = pos.refSell ? ((price - pos.refSell) / pos.refSell) * 100 : null
+  const patrimonio = pos.qty * price
+  const custoTotal = pos.qty * pos.avgPrice
+  const lucro = patrimonio - custoTotal
+
+  // Classificação do sinal
+  let signal = 'hold'
+  let signalReasons = []
+  let signalScore = 0 // -3 a +3 (negativo = venda, positivo = compra)
+
+  // Vs PM
+  if (pct < -20) { signalScore += 2; signalReasons.push(`Preço ${pct.toFixed(1)}% abaixo do PM — oportunidade forte`) }
+  else if (pct < -10) { signalScore += 1; signalReasons.push(`Preço ${pct.toFixed(1)}% abaixo do PM — atenção`) }
+  else if (pct > 50) { signalScore -= 2; signalReasons.push(`Preço ${pct.toFixed(1)}% acima do PM — considere venda parcial`) }
+  else if (pct > 30) { signalScore -= 1; signalReasons.push(`Preço ${pct.toFixed(1)}% acima do PM`) }
+
+  // Vs referência de compra
+  if (pos.refBuy && price <= pos.refBuy) {
+    signalScore += 1.5
+    signalReasons.push(`Abaixo da sua ref. de compra (${fmt.brl(pos.refBuy)})`)
+  }
+  // Vs referência de venda
+  if (pos.refSell && price >= pos.refSell) {
+    signalScore -= 1.5
+    signalReasons.push(`Acima da sua ref. de venda (${fmt.brl(pos.refSell)})`)
+  }
+
+  if (signalScore >= 2) signal = 'strong_buy'
+  else if (signalScore >= 1) signal = 'buy'
+  else if (signalScore <= -2) signal = 'strong_sell'
+  else if (signalScore <= -1) signal = 'sell'
+  else signal = 'hold'
+
+  return { pct, patrimonio, custoTotal, lucro, signal, signalReasons, signalScore }
+}
+
+// Sugestão de aporte
+function calcAporteSugestao(pos, price, aporte) {
+  if (!aporte || !price) return null
+  const qtdComprar = aporte / price
+  const novaQty = pos.qty + qtdComprar
+  const novoCusto = (pos.qty * pos.avgPrice) + aporte
+  const novoPM = novaQty > 0 ? novoCusto / novaQty : 0
+  const reducaoPM = pos.avgPrice > 0 ? pos.avgPrice - novoPM : 0
+  return { qtdComprar, novaQty, novoPM, reducaoPM }
+}
+
+// Sugestão de balanceamento
+function calcBalanceSugestao(positions, prices, totalAporte) {
+  // Distribuir proporcionalmente por % de sinal de compra
+  const buySignals = positions
+    .map(p => {
+      const pr = prices[p.symbol]?.price
+      const sig = calcSignals(p, pr)
+      return { ...p, price: pr, score: sig?.signalScore || 0 }
+    })
+    .filter(p => p.score > 0 && p.price)
+
+  if (!buySignals.length) return []
+  const totalScore = buySignals.reduce((s, p) => s + p.score, 0)
+  return buySignals.map(p => ({
+    symbol: p.symbol,
+    pct: (p.score / totalScore) * 100,
+    valor: (p.score / totalScore) * totalAporte,
+    price: p.price,
+  }))
+}
+
+const SIGNAL_CONFIG = {
+  strong_buy:  { label: 'Compra Forte', color: '#22c55e', bg: 'rgba(34,197,94,.12)',  icon: '▲▲' },
+  buy:         { label: 'Comprar',      color: '#86efac', bg: 'rgba(134,239,172,.12)', icon: '▲'  },
+  hold:        { label: 'Manter',       color: '#94a3b8', bg: 'rgba(148,163,184,.1)',  icon: '●'  },
+  sell:        { label: 'Vender Parcial', color: '#fbbf24', bg: 'rgba(251,191,36,.12)', icon: '▼' },
+  strong_sell: { label: 'Venda Forte',  color: '#ef4444', bg: 'rgba(239,68,68,.12)',  icon: '▼▼' },
+}
+
+// ── Mini gráfico SVG ──────────────────────────────────────
+function MiniChart({ history, signal, refBuy, refSell }) {
+  if (!history?.length) return (
+    <div style={{ height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--tx3)', fontSize: 11 }}>Carregando...</div>
+  )
+  const W = 260, H = 60, PAD = 4
+  const prices = history.map(h => h.price)
+  const min = Math.min(...prices), max = Math.max(...prices)
+  const range = max - min || 1
+  const xS = (i) => PAD + (i / (prices.length - 1)) * (W - PAD * 2)
+  const yS = (v) => H - PAD - ((v - min) / range) * (H - PAD * 2)
+  const sc = SIGNAL_CONFIG[signal] || SIGNAL_CONFIG.hold
+  const d = prices.map((v, i) => `${i === 0 ? 'M' : 'L'} ${xS(i)} ${yS(v)}`).join(' ')
+  const area = `${d} L ${xS(prices.length-1)} ${H} L ${PAD} ${H} Z`
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 60, display: 'block' }}>
+      <defs>
+        <linearGradient id={`gr-${signal}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={sc.color} stopOpacity=".25" />
+          <stop offset="100%" stopColor={sc.color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d={area} fill={`url(#gr-${signal})`} />
+      <path d={d} fill="none" stroke={sc.color} strokeWidth="1.5" />
+      {refBuy && refBuy > min && refBuy < max && (
+        <line x1={PAD} y1={yS(refBuy)} x2={W - PAD} y2={yS(refBuy)}
+          stroke="#22c55e" strokeWidth="1" strokeDasharray="3,2" opacity=".7" />
+      )}
+      {refSell && refSell > min && refSell < max && (
+        <line x1={PAD} y1={yS(refSell)} x2={W - PAD} y2={yS(refSell)}
+          stroke="#ef4444" strokeWidth="1" strokeDasharray="3,2" opacity=".7" />
+      )}
+    </svg>
+  )
+}
+
+export function CriptoTab() {
+  const [positions, setPositions] = useState(() => {
+    const saved = getCriptoPositions()
+    if (saved.length) return saved
+    return DEFAULT_POSITIONS
+  })
+  const [prices, setPrices] = useState({})
+  const [histories, setHistories] = useState({})
+  const [loadingPrices, setLoadingPrices] = useState(true)
+  const [editMode, setEditMode] = useState(false)
+  const [editPos, setEditPos] = useState(null) // symbol em edição
+  const [aporte, setAporte] = useState('')
+  const [selectedSymbol, setSelectedSymbol] = useState('BTC')
+  const [period, setPeriod] = useState(90)
+  const [showBalance, setShowBalance] = useState(false)
+
+  // Buscar preços
+  useEffect(() => {
+    const symbols = positions.map(p => p.symbol)
+    setLoadingPrices(true)
+    fetchAllCriptoPrices(symbols).then(p => {
+      setPrices(p)
+      setLoadingPrices(false)
+    })
+    // Atualizar a cada 60s
+    const iv = setInterval(() => {
+      fetchAllCriptoPrices(symbols).then(setPrices)
+    }, 60000)
+    return () => clearInterval(iv)
+  }, [positions.map(p => p.symbol).join(',')])
+
+  // Buscar histórico do ativo selecionado
+  useEffect(() => {
+    if (histories[`${selectedSymbol}-${period}`]) return
+    fetchCriptoHistory(selectedSymbol, period).then(h => {
+      if (h) setHistories(prev => ({ ...prev, [`${selectedSymbol}-${period}`]: h }))
+    })
+  }, [selectedSymbol, period])
+
+  const save = (newPos) => {
+    setPositions(newPos)
+    saveCriptoPositions(newPos)
+  }
+
+  const updateField = (symbol, field, value) => {
+    save(positions.map(p => p.symbol === symbol ? { ...p, [field]: parseFloat(value) || 0 } : p))
+  }
+
+  const selectedPos = positions.find(p => p.symbol === selectedSymbol)
+  const selectedPrice = prices[selectedSymbol]?.price
+  const selectedSig = calcSignals(selectedPos, selectedPrice)
+  const selectedHistory = histories[`${selectedSymbol}-${period}`]
+  const sc = SIGNAL_CONFIG[selectedSig?.signal || 'hold']
+
+  // Totais
+  const totalPatrimonio = positions.reduce((s, p) => s + (p.qty * (prices[p.symbol]?.price || 0)), 0)
+  const totalCusto = positions.reduce((s, p) => s + (p.qty * p.avgPrice), 0)
+  const totalLucro = totalPatrimonio - totalCusto
+
+  // Sugestão de aporte
+  const aporteNum = parseFloat(aporte) || 0
+  const aporteDetail = aporteNum > 0 && selectedPrice
+    ? calcAporteSugestao(selectedPos, selectedPrice, aporteNum)
+    : null
+
+  // Sugestão de balanceamento
+  const balance = showBalance && aporteNum > 0
+    ? calcBalanceSugestao(positions, prices, aporteNum)
+    : []
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+      {/* KPIs cripto */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px,1fr))', gap: 10 }}>
+        <KPI label="Patrimônio Cripto" value={fmt.brl(totalPatrimonio)} sub={`${positions.filter(p=>p.qty>0).length} ativos`} color="var(--ac)" />
+        <KPI label="Custo Total" value={fmt.brl(totalCusto)} sub="Investido" />
+        <KPI label="Resultado" value={fmt.brl(totalLucro)} sub={totalCusto > 0 ? `${((totalLucro/totalCusto)*100).toFixed(1)}%` : '—'} color={totalLucro >= 0 ? 'var(--gr)' : 'var(--rd)'} />
+      </div>
+
+      {/* Grid de cards */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))', gap: 10 }}>
+        {positions.map(pos => {
+          const pr = prices[pos.symbol]
+          const sig = calcSignals(pos, pr?.price)
+          const sconf = SIGNAL_CONFIG[sig?.signal || 'hold']
+          const isSelected = selectedSymbol === pos.symbol
+          return (
+            <div key={pos.symbol}
+              onClick={() => setSelectedSymbol(pos.symbol)}
+              style={{ background: 'var(--bg2)', border: `1.5px solid ${isSelected ? sconf.color : 'var(--bd)'}`, borderRadius: 14, padding: 12, cursor: 'pointer', transition: 'border .15s' }}>
+              {/* Header */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 900, fontSize: 16 }}>{pos.symbol}</div>
+                  {pr && <div style={{ fontSize: 11, color: pr.change24h >= 0 ? 'var(--gr)' : 'var(--rd)', fontWeight: 700 }}>
+                    {pr.change24h >= 0 ? '+' : ''}{pr.change24h?.toFixed(2)}% 24h
+                  </div>}
+                </div>
+                <div style={{ textAlign: 'right' }}>
+                  <div style={{ fontWeight: 800, fontSize: 15 }}>{pr ? fmt.brl(pr.price) : '—'}</div>
+                  <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 7px', borderRadius: 99, background: sconf.bg, color: sconf.color }}>
+                    {sconf.icon} {sconf.label}
+                  </span>
+                </div>
+              </div>
+
+              {/* Métricas */}
+              {pos.qty > 0 && sig && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, marginBottom: 8 }}>
+                  {[
+                    ['Patrimônio', fmt.brl(sig.patrimonio)],
+                    ['Resultado', fmt.brl(sig.lucro)],
+                    ['PM', fmt.brl(pos.avgPrice)],
+                    ['Vs PM', `${sig.pct >= 0 ? '+' : ''}${sig.pct.toFixed(1)}%`],
+                  ].map(([l, v]) => (
+                    <div key={l} style={{ background: 'var(--bg3)', borderRadius: 7, padding: '5px 8px' }}>
+                      <div style={{ fontSize: 9, color: 'var(--tx3)' }}>{l}</div>
+                      <div style={{ fontSize: 11, fontWeight: 700 }}>{v}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Refs */}
+              {(pos.refBuy > 0 || pos.refSell > 0) && (
+                <div style={{ display: 'flex', gap: 6, fontSize: 10 }}>
+                  {pos.refBuy > 0 && <span style={{ color: '#22c55e', background: 'rgba(34,197,94,.1)', padding: '2px 7px', borderRadius: 99 }}>▲ {fmt.brl(pos.refBuy)}</span>}
+                  {pos.refSell > 0 && <span style={{ color: '#ef4444', background: 'rgba(239,68,68,.1)', padding: '2px 7px', borderRadius: 99 }}>▼ {fmt.brl(pos.refSell)}</span>}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Detalhe do ativo selecionado */}
+      {selectedPos && (
+        <div style={{ background: 'var(--bg2)', border: `1px solid ${sc.color}40`, borderRadius: 16, overflow: 'hidden' }}>
+          {/* Header detalhe */}
+          <div style={{ padding: '14px 16px', borderBottom: '1px solid var(--bd)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: sc.bg }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontWeight: 900, fontSize: 20 }}>{selectedSymbol}</span>
+              <span style={{ fontSize: 13, fontWeight: 800, color: sc.color, padding: '3px 10px', borderRadius: 99, background: 'var(--bg2)' }}>
+                {sc.icon} {sc.label}
+              </span>
+            </div>
+            <div style={{ display: 'flex', gap: 6 }}>
+              {[30,90,365].map(d => (
+                <button key={d} onClick={() => setPeriod(d)} style={{ padding: '4px 10px', borderRadius: 6, border: `1px solid ${period===d ? sc.color : 'var(--bd)'}`, background: period===d ? sc.bg : 'transparent', color: period===d ? sc.color : 'var(--tx3)', fontFamily: 'inherit', fontSize: 11, cursor: 'pointer', fontWeight: period===d ? 700 : 400 }}>
+                  {d === 365 ? '1a' : `${d}d`}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Gráfico */}
+            <MiniChart history={selectedHistory} signal={selectedSig?.signal || 'hold'} refBuy={selectedPos.refBuy} refSell={selectedPos.refSell} />
+            {(selectedPos.refBuy > 0 || selectedPos.refSell > 0) && (
+              <div style={{ display: 'flex', gap: 10, fontSize: 11, color: 'var(--tx3)' }}>
+                {selectedPos.refBuy > 0 && <span>── <span style={{ color: '#22c55e' }}>verde</span> = ref. compra ({fmt.brl(selectedPos.refBuy)})</span>}
+                {selectedPos.refSell > 0 && <span>── <span style={{ color: '#ef4444' }}>vermelho</span> = ref. venda ({fmt.brl(selectedPos.refSell)})</span>}
+              </div>
+            )}
+
+            {/* Razões do sinal */}
+            {selectedSig?.signalReasons.length > 0 && (
+              <div style={{ background: sc.bg, borderRadius: 10, padding: '10px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: sc.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Análise do sinal</div>
+                {selectedSig.signalReasons.map((r, i) => (
+                  <div key={i} style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 3 }}>· {r}</div>
+                ))}
+              </div>
+            )}
+
+            {/* Editar posição */}
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>Minha posição</div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px,1fr))', gap: 8 }}>
+                {[
+                  ['Quantidade', 'qty', selectedPos.qty],
+                  ['Preço Médio (R$)', 'avgPrice', selectedPos.avgPrice],
+                  ['Ref. Compra (R$)', 'refBuy', selectedPos.refBuy],
+                  ['Ref. Venda (R$)', 'refSell', selectedPos.refSell],
+                ].map(([label, field, val]) => (
+                  <div key={field}>
+                    <div style={{ fontSize: 10, color: 'var(--tx3)', marginBottom: 3 }}>{label}</div>
+                    <input
+                      type="number" step="any"
+                      defaultValue={val || ''}
+                      onBlur={e => updateField(selectedSymbol, field, e.target.value)}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Simulador de aporte */}
+            <div>
+              <div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                Simulador de aporte
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative', flex: 1, minWidth: 140 }}>
+                  <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--tx3)', fontSize: 12 }}>R$</span>
+                  <input
+                    type="number" placeholder="Valor a investir"
+                    value={aporte}
+                    onChange={e => setAporte(e.target.value)}
+                    style={{ width: '100%', padding: '8px 10px 8px 28px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 13, fontFamily: 'inherit', boxSizing: 'border-box' }}
+                  />
+                </div>
+                <button onClick={() => setShowBalance(v => !v)} style={{ padding: '8px 14px', borderRadius: 8, border: `1px solid ${showBalance ? 'var(--ac)' : 'var(--bd)'}`, background: showBalance ? 'rgba(99,102,241,.12)' : 'var(--bg3)', color: showBalance ? 'var(--ac)' : 'var(--tx3)', fontFamily: 'inherit', fontSize: 12, cursor: 'pointer', fontWeight: showBalance ? 700 : 400 }}>
+                  ⚖ Balancear
+                </button>
+              </div>
+
+              {/* Resultado do aporte */}
+              {aporteDetail && (
+                <div style={{ marginTop: 10, background: 'var(--bg3)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                    Com R$ {fmt.num(aporteNum, 2)} em {selectedSymbol}
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                    {[
+                      ['Qtd. a comprar', `${aporteDetail.qtdComprar.toFixed(6)} ${selectedSymbol}`],
+                      ['Nova quantidade', `${aporteDetail.novaQty.toFixed(6)} ${selectedSymbol}`],
+                      ['Novo PM', fmt.brl(aporteDetail.novoPM)],
+                      ['Redução PM', aporteDetail.reducaoPM > 0 ? `−${fmt.brl(aporteDetail.reducaoPM)}` : '—'],
+                    ].map(([l, v]) => (
+                      <div key={l} style={{ background: 'var(--bg2)', borderRadius: 8, padding: '8px 10px' }}>
+                        <div style={{ fontSize: 9, color: 'var(--tx3)', marginBottom: 2 }}>{l}</div>
+                        <div style={{ fontSize: 12, fontWeight: 700 }}>{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {selectedSig?.signal?.includes('buy') && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#22c55e', background: 'rgba(34,197,94,.08)', borderRadius: 8, padding: '8px 12px' }}>
+                      ✓ Sinal de compra ativo · Aportar agora reduz o PM em {fmt.brl(Math.abs(aporteDetail.reducaoPM))}
+                    </div>
+                  )}
+                  {selectedSig?.signal === 'hold' && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: 'var(--tx3)', background: 'var(--bg3)', borderRadius: 8, padding: '8px 12px' }}>
+                      ● Sem sinal claro — aporte neutro, monitore o preço
+                    </div>
+                  )}
+                  {selectedSig?.signal?.includes('sell') && (
+                    <div style={{ marginTop: 8, fontSize: 12, color: '#fbbf24', background: 'rgba(251,191,36,.08)', borderRadius: 8, padding: '8px 12px' }}>
+                      ⚠ Sinal de venda ativo — comprar agora não é ideal para buy & hold de longo prazo
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Sugestão de balanceamento */}
+              {showBalance && balance.length > 0 && (
+                <div style={{ marginTop: 10, background: 'var(--bg3)', borderRadius: 10, padding: '12px 14px' }}>
+                  <div style={{ fontSize: 11, color: 'var(--tx3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 10 }}>
+                    Sugestão de balanceamento — R$ {fmt.num(aporteNum, 2)}
+                  </div>
+                  {balance.map(b => (
+                    <div key={b.symbol} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                      <div style={{ fontWeight: 800, minWidth: 40 }}>{b.symbol}</div>
+                      <div style={{ flex: 1, background: 'var(--bg2)', borderRadius: 99, overflow: 'hidden', height: 6 }}>
+                        <div style={{ width: `${b.pct}%`, height: '100%', background: 'var(--ac)', borderRadius: 99 }} />
+                      </div>
+                      <div style={{ fontSize: 11, fontWeight: 700, minWidth: 80, textAlign: 'right' }}>
+                        {fmt.brl(b.valor)} <span style={{ color: 'var(--tx3)', fontWeight: 400 }}>({b.pct.toFixed(0)}%)</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{ fontSize: 11, color: 'var(--tx3)', marginTop: 6 }}>
+                    Distribuição proporcional aos sinais de compra ativos
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 // ── Componente principal ──────────────────────────────────
 export default function Cenario() {
   const { user, macro } = useApp()
@@ -356,6 +776,7 @@ export default function Cenario() {
 
   const TABS = [
     { id: 'patrimonio', label: 'Evolução Patrimônio' },
+    { id: 'cripto', label: '₿ Cripto' },
     { id: 'macro', label: 'Macro / Cenário' },
   ]
 
@@ -514,6 +935,9 @@ export default function Cenario() {
           )}
         </>
       )}
+
+      {/* ── ABA: Cripto ── */}
+      {tab === 'cripto' && <CriptoTab />}
 
       {/* ── ABA: Macro / Cenário ── */}
       {tab === 'macro' && (

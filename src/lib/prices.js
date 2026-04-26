@@ -171,3 +171,69 @@ export const fetchAllPrices = async (assets) => {
   )
   return results
 }
+
+// ── CoinGecko — preços cripto em BRL ─────────────────────
+const COINGECKO_IDS = {
+  BTC: 'bitcoin', ETH: 'ethereum', ADA: 'cardano',
+  SOL: 'solana', XRP: 'ripple', POL: 'matic-network',
+  LTC: 'litecoin', LINK: 'chainlink', BNB: 'binancecoin',
+  DOGE: 'dogecoin', DOT: 'polkadot', AVAX: 'avalanche-2',
+}
+
+export const getCoinGeckoId = (symbol) =>
+  COINGECKO_IDS[symbol.toUpperCase()] || symbol.toLowerCase()
+
+export const fetchCriptoPrice = async (symbol) => {
+  const id = getCoinGeckoId(symbol)
+  try {
+    const r = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${id}&vs_currencies=brl&include_24hr_change=true&include_7d_change=true`
+    )
+    if (!r.ok) return null
+    const d = await r.json()
+    const data = d[id]
+    if (!data) return null
+    return {
+      price: data.brl,
+      change24h: data.brl_24h_change || 0,
+      change7d: data.brl_7d_change || 0,
+    }
+  } catch { return null }
+}
+
+export const fetchCriptoHistory = async (symbol, days = 90) => {
+  const id = getCoinGeckoId(symbol)
+  try {
+    const r = await fetch(
+      `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=brl&days=${days}&interval=daily`
+    )
+    if (!r.ok) return null
+    const d = await r.json()
+    // prices: [[timestamp, price], ...]
+    return (d.prices || []).map(([ts, price]) => ({
+      date: new Date(ts).toISOString().slice(0, 10),
+      price,
+    }))
+  } catch { return null }
+}
+
+export const fetchAllCriptoPrices = async (symbols) => {
+  const ids = symbols.map(getCoinGeckoId).join(',')
+  try {
+    const r = await fetch(
+      `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=brl&include_24hr_change=true&include_7d_change=true`
+    )
+    if (!r.ok) return {}
+    const d = await r.json()
+    const result = {}
+    symbols.forEach(sym => {
+      const id = getCoinGeckoId(sym)
+      if (d[id]) result[sym] = {
+        price: d[id].brl,
+        change24h: d[id].brl_24h_change || 0,
+        change7d: d[id].brl_7d_change || 0,
+      }
+    })
+    return result
+  } catch { return {} }
+}

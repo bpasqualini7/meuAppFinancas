@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 9,
-  patch: 0,
+  patch: 1,
   date: '2026-04-25',
   label: 'beta',
 }
@@ -17,6 +17,7 @@ export const BUILD_DATE = new Date(VERSION.date).toLocaleDateString('pt-BR')
 
 // Changelog das versões
 export const CHANGELOG = [
+  { version: 'v0.9.1', date: '26/04/2026', desc: 'Cenário: aba Cripto — gráfico histórico, gatilhos compra/venda/manter, simulador de aporte, balanceamento proporcional, BTC/ETH/ADA/SOL/XRP/POL/LTC/LINK' },
   { version: 'v0.9.0', date: '25/04/2026', desc: 'Cenário: gráfico evolução patrimônio mês a mês, comparativo por classe (FII/Ação BR/outros), barras de dividendos, tooltip hover, tabela últimos 12m, aba Macro' },
   { version: 'v0.8.3', date: '25/04/2026', desc: 'Fix cotações 404 (fallback sem sufixo F), exportar CSV no Extrato e Carteira, melhoria proxy BolsaI fallback chain' },
   { version: 'v0.8.1', date: '25/04/2026', desc: 'Carteira: fix duplicata de classes, coluna Categoria/Setor clicável, filtro por setor via dropdown, asset_class normalizado' },

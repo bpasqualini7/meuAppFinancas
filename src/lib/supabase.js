@@ -343,3 +343,16 @@ export const getDividendsForChart = async (userId) => {
   if (error) throw error
   return data
 }
+
+// ── Cripto positions (localStorage-based, sem tabela nova) ─
+export const CRIPTO_KEY = 'investhub_cripto_positions'
+
+export const getCriptoPositions = () => {
+  try {
+    return JSON.parse(localStorage.getItem(CRIPTO_KEY) || '[]')
+  } catch { return [] }
+}
+
+export const saveCriptoPositions = (positions) => {
+  localStorage.setItem(CRIPTO_KEY, JSON.stringify(positions))
+}
