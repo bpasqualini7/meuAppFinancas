@@ -961,31 +961,42 @@ export function Proventos() {
             <input value={filterTicker} onChange={e => setFilterTicker(e.target.value)} placeholder="Filtrar por ativo..." style={{ width: '100%', padding: '7px 12px', borderRadius: 8, border: '1px solid var(--bd)', background: 'var(--bg3)', color: 'var(--tx)', fontSize: 12, fontFamily: 'inherit', boxSizing: 'border-box' }} />
           </div>
           {filtered.length === 0 ? <div style={{ padding: 24 }}><Empty icon="◇" message="Nenhum provento lançado ainda." /></div> : (
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                <thead><tr style={{ background: 'var(--bg3)' }}>{['Ativo','Data','Valor Total','Por Cota','Cotas','Saldo',''].map(h => <th key={h} style={{ padding: '8px 12px', textAlign: 'left', color: 'var(--tx3)', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', borderBottom: '1px solid var(--bd)', whiteSpace: 'nowrap' }}>{h}</th>)}</tr></thead>
-                <tbody>
-                  {filtered.sort((a,b) => b.payment_date.localeCompare(a.payment_date)).map((d, i) => (
-                    <tr key={d.id} style={{ borderBottom: '1px solid var(--bd)', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)' }}>
-                      <td style={{ padding: '9px 12px', fontWeight: 800 }}>{d.assets?.ticker}<div style={{ fontSize: 10, color: 'var(--tx3)', fontWeight: 400 }}>{d.assets?.name}</div></td>
-                      <td style={{ padding: '9px 12px', color: 'var(--tx2)', whiteSpace: 'nowrap' }}>{fmt.date(d.payment_date)}</td>
-                      <td style={{ padding: '9px 12px', fontWeight: 800, color: 'var(--gr)' }}>{fmt.brl(d.total_amount)}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{fmt.brl(d.amount_per_share)}</td>
-                      <td style={{ padding: '9px 12px', color: 'var(--tx2)' }}>{fmt.num(d.quantity_held, 0)}</td>
-                      <td style={{ padding: '9px 12px' }}><span style={{ color: (d.available_balance||0) > 0 ? 'var(--am)' : 'var(--tx3)', fontWeight: 700 }}>{fmt.brl(d.available_balance||0)}</span></td>
-                      <td style={{ padding: '9px 12px', position: 'relative' }} onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setMenuId(menuId === d.id ? null : d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx3)', fontSize: 16, padding: '2px 6px' }}>···</button>
-                        {menuId === d.id && (
-                          <div style={{ position: 'fixed', right: 16, background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 10, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,.3)', minWidth: 120, overflow: 'hidden' }}>
-                            <button onClick={() => handleEdit(d)} style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--tx)', cursor: 'pointer', fontSize: 13 }}>✎ Editar</button>
-                            <button onClick={() => handleDelete(d.id)} style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--rd)', cursor: 'pointer', fontSize: 13 }}>✕ Excluir</button>
-                          </div>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div>
+              {filtered.sort((a,b) => b.payment_date.localeCompare(a.payment_date)).map((d, i) => (
+                <div key={d.id} style={{ borderBottom: '1px solid var(--bd)', padding: '11px 14px', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,.02)', display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {/* Ticker + nome */}
+                  <div style={{ minWidth: 68 }}>
+                    <div style={{ fontWeight: 800, fontSize: 13 }}>{d.assets?.ticker}</div>
+                    <div style={{ fontSize: 9, color: 'var(--tx3)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 80 }}>{d.assets?.name}</div>
+                  </div>
+                  {/* Data */}
+                  <div style={{ fontSize: 11, color: 'var(--tx3)', whiteSpace: 'nowrap', minWidth: 70 }}>{fmt.date(d.payment_date)}</div>
+                  {/* Valor total (destaque) */}
+                  <div style={{ fontWeight: 800, color: 'var(--gr)', fontSize: 14, flex: 1 }}>{fmt.brl(d.total_amount)}</div>
+                  {/* Por cota + cotas — stack vertical */}
+                  <div style={{ textAlign: 'right', minWidth: 70 }}>
+                    <div style={{ fontSize: 11, color: 'var(--tx2)' }}>{fmt.brl(d.amount_per_share)}<span style={{ color: 'var(--tx3)', fontSize: 9 }}>/cota</span></div>
+                    <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{fmt.num(d.quantity_held, 0)} cotas</div>
+                  </div>
+                  {/* Saldo */}
+                  <div style={{ minWidth: 60, textAlign: 'right' }}>
+                    {(d.available_balance||0) > 0
+                      ? <span style={{ color: 'var(--am)', fontWeight: 700, fontSize: 12 }}>{fmt.brl(d.available_balance)}</span>
+                      : <span style={{ color: 'var(--tx3)', fontSize: 11 }}>—</span>}
+                    <div style={{ fontSize: 9, color: 'var(--tx3)' }}>saldo</div>
+                  </div>
+                  {/* Menu */}
+                  <div style={{ position: 'relative' }} onClick={e => e.stopPropagation()}>
+                    <button onClick={() => setMenuId(menuId === d.id ? null : d.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--tx3)', fontSize: 18, padding: '4px 6px', lineHeight: 1 }}>···</button>
+                    {menuId === d.id && (
+                      <div style={{ position: 'fixed', right: 16, background: 'var(--bg2)', border: '1px solid var(--bd)', borderRadius: 10, zIndex: 100, boxShadow: '0 8px 24px rgba(0,0,0,.3)', minWidth: 130, overflow: 'hidden' }}>
+                        <button onClick={() => handleEdit(d)} style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--tx)', cursor: 'pointer', fontSize: 13 }}>✎ Editar</button>
+                        <button onClick={() => handleDelete(d.id)} style={{ display: 'block', width: '100%', padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', color: 'var(--rd)', cursor: 'pointer', fontSize: 13 }}>✕ Excluir</button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                ))}
             </div>
           )}
           <div style={{ padding: '8px 14px', fontSize: 11, color: 'var(--tx3)', borderTop: '1px solid var(--bd)' }}>{filtered.length} lançamento{filtered.length !== 1 ? 's' : ''}</div>

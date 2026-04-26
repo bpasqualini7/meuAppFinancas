@@ -7,7 +7,7 @@
 export const VERSION = {
   major: 0,
   minor: 8,
-  patch: 3,
+  patch: 4,
   date: '2026-04-25',
   label: 'beta',
 }
