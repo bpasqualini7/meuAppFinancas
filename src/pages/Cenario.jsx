@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useApp, fmt, CLASS_LABEL } from '../lib/context'
 import { Card, KPI, Spinner, Empty } from '../components/ui'
 import { fetchNews } from '../lib/prices'
-import { getOperationsForChart, getDividendsForChart, getCriptoPositions, saveCriptoPositions } from '../lib/supabase'
+import { getOperationsForChart, getDividendsForChart, getCriptoPositionsDB, saveCriptoPositionsDB } from '../lib/supabase'
 import { fetchAllCriptoPrices, fetchCriptoHistory, getCoinGeckoId } from '../lib/prices'
 
 // ── Paleta de linhas por classe ─────────────────────────
@@ -296,45 +296,74 @@ const DEFAULT_POSITIONS = [
   { symbol: 'LINK', qty: 0, avgPrice: 0, refBuy: 0, refSell: 0 },
 ]
 
-// ── Calcula gatilhos e sinais ─────────────────────────────
-function calcSignals(pos, price) {
+// ── Helpers técnicos ─────────────────────────────────────
+function calcRSI(history, period = 14) {
+  if (!history || history.length < period + 1) return null
+  const prices = history.map(h => h.price)
+  let gains = 0, losses = 0
+  for (let i = prices.length - period; i < prices.length; i++) {
+    const diff = prices[i] - prices[i - 1]
+    if (diff > 0) gains += diff; else losses += Math.abs(diff)
+  }
+  const avg = (x) => x / period
+  if (avg(losses) === 0) return 100
+  return Math.round(100 - (100 / (1 + avg(gains) / avg(losses))))
+}
+function calcMA(history, period) {
+  if (!history || history.length < period) return null
+  const slice = history.slice(-period)
+  return slice.reduce((s, h) => s + h.price, 0) / period
+}
+
+// ── Calcula gatilhos e sinais (enriquecido) ──────────────
+function calcSignals(pos, price, history) {
   if (!price || !pos.avgPrice) return null
   const pct = ((price - pos.avgPrice) / pos.avgPrice) * 100
-  const refBuyPct = pos.refBuy ? ((pos.refBuy - price) / pos.refBuy) * 100 : null
-  const refSellPct = pos.refSell ? ((price - pos.refSell) / pos.refSell) * 100 : null
   const patrimonio = pos.qty * price
   const custoTotal = pos.qty * pos.avgPrice
   const lucro = patrimonio - custoTotal
+  let signalReasons = [], signalScore = 0
 
-  // Classificação do sinal
+  // 1. VS PREÇO MÉDIO
+  if (pct < -25)      { signalScore += 2.5; signalReasons.push(`🔻 Preço ${pct.toFixed(1)}% abaixo do PM — desconto expressivo, boa entrada`) }
+  else if (pct < -10) { signalScore += 1;   signalReasons.push(`↓ Preço ${pct.toFixed(1)}% abaixo do PM — aporte pode reduzir custo`) }
+  else if (pct > 100) { signalScore -= 2;   signalReasons.push(`🚀 Preço ${pct.toFixed(1)}% acima do PM — lucro elevado, avalie venda parcial`) }
+  else if (pct > 50)  { signalScore -= 1;   signalReasons.push(`↑ Preço ${pct.toFixed(1)}% acima do PM — em alta, monitore`) }
+  else                {                      signalReasons.push(`● Preço ${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% vs PM — próximo ao custo`) }
+
+  // 2. REFS DO USUÁRIO
+  if (pos.refBuy && price <= pos.refBuy)           { signalScore += 1.5; signalReasons.push(`✅ Abaixo da ref. de compra (${fmt.brl(pos.refBuy)}) — sinal pessoal de entrada`) }
+  else if (pos.refBuy && price <= pos.refBuy*1.05) { signalScore += 0.5; signalReasons.push(`⚡ Próximo da ref. de compra (${fmt.brl(pos.refBuy)})`) }
+  if (pos.refSell && price >= pos.refSell)          { signalScore -= 1.5; signalReasons.push(`🎯 Acima da ref. de venda (${fmt.brl(pos.refSell)}) — alvo pessoal atingido`) }
+
+  // 3. RSI
+  const rsi = calcRSI(history)
+  if (rsi !== null) {
+    if (rsi < 30)      { signalScore += 1.5; signalReasons.push(`📊 RSI ${rsi} — sobrevendido (<30): pressão de baixa exaurida, possível reversão`) }
+    else if (rsi < 45) { signalScore += 0.5; signalReasons.push(`📊 RSI ${rsi} — zona baixa (30-45): sem excesso de otimismo`) }
+    else if (rsi > 70) { signalScore -= 1.5; signalReasons.push(`📊 RSI ${rsi} — sobrecomprado (>70): mercado aquecido, risco de correção`) }
+    else if (rsi > 60) { signalScore -= 0.5; signalReasons.push(`📊 RSI ${rsi} — zona alta (60-70): atenção`) }
+    else               {                      signalReasons.push(`📊 RSI ${rsi} — zona neutra (45-60): sem sinal técnico claro`) }
+  }
+
+  // 4. MÉDIAS MÓVEIS
+  const ma20 = calcMA(history, 20), ma50 = calcMA(history, 50), ma200 = calcMA(history, 200)
+  if (ma20 && ma50) {
+    if (ma20 > ma50 && price > ma50)  { signalScore += 0.5; signalReasons.push(`📈 MM20 > MM50 e preço acima da MM50 — tendência de alta no curto prazo`) }
+    else if (ma20 < ma50 && price < ma50) { signalScore -= 0.5; signalReasons.push(`📉 MM20 < MM50 e preço abaixo da MM50 — tendência de baixa`) }
+  }
+  if (ma200) {
+    if (price > ma200) { signalScore += 0.5; signalReasons.push(`🏔 Preço acima da MM200 (${fmt.brl(ma200)}) — tendência de longo prazo positiva`) }
+    else               { signalScore -= 0.5; signalReasons.push(`⚠ Preço abaixo da MM200 (${fmt.brl(ma200)}) — tendência de longo prazo negativa`) }
+  }
+
   let signal = 'hold'
-  let signalReasons = []
-  let signalScore = 0 // -3 a +3 (negativo = venda, positivo = compra)
-
-  // Vs PM
-  if (pct < -20) { signalScore += 2; signalReasons.push(`Preço ${pct.toFixed(1)}% abaixo do PM — oportunidade forte`) }
-  else if (pct < -10) { signalScore += 1; signalReasons.push(`Preço ${pct.toFixed(1)}% abaixo do PM — atenção`) }
-  else if (pct > 50) { signalScore -= 2; signalReasons.push(`Preço ${pct.toFixed(1)}% acima do PM — considere venda parcial`) }
-  else if (pct > 30) { signalScore -= 1; signalReasons.push(`Preço ${pct.toFixed(1)}% acima do PM`) }
-
-  // Vs referência de compra
-  if (pos.refBuy && price <= pos.refBuy) {
-    signalScore += 1.5
-    signalReasons.push(`Abaixo da sua ref. de compra (${fmt.brl(pos.refBuy)})`)
-  }
-  // Vs referência de venda
-  if (pos.refSell && price >= pos.refSell) {
-    signalScore -= 1.5
-    signalReasons.push(`Acima da sua ref. de venda (${fmt.brl(pos.refSell)})`)
-  }
-
-  if (signalScore >= 2) signal = 'strong_buy'
+  if (signalScore >= 3) signal = 'strong_buy'
   else if (signalScore >= 1) signal = 'buy'
-  else if (signalScore <= -2) signal = 'strong_sell'
+  else if (signalScore <= -3) signal = 'strong_sell'
   else if (signalScore <= -1) signal = 'sell'
-  else signal = 'hold'
 
-  return { pct, patrimonio, custoTotal, lucro, signal, signalReasons, signalScore }
+  return { pct, patrimonio, custoTotal, lucro, signal, signalReasons, signalScore, rsi, ma20, ma50, ma200 }
 }
 
 // Sugestão de aporte
@@ -354,7 +383,7 @@ function calcBalanceSugestao(positions, prices, totalAporte) {
   const buySignals = positions
     .map(p => {
       const pr = prices[p.symbol]?.price
-      const sig = calcSignals(p, pr)
+      const sig = calcSignals(p, pr, null)
       return { ...p, price: pr, score: sig?.signalScore || 0 }
     })
     .filter(p => p.score > 0 && p.price)
@@ -414,11 +443,7 @@ function MiniChart({ history, signal, refBuy, refSell }) {
 }
 
 export function CriptoTab() {
-  const [positions, setPositions] = useState(() => {
-    const saved = getCriptoPositions()
-    if (saved.length) return saved
-    return DEFAULT_POSITIONS
-  })
+  const [positions, setPositions] = useState(DEFAULT_POSITIONS)
   const [prices, setPrices] = useState({})
   const [histories, setHistories] = useState({})
   const [loadingPrices, setLoadingPrices] = useState(true)
@@ -452,9 +477,19 @@ export function CriptoTab() {
     })
   }, [selectedSymbol, period])
 
+  const { user } = useApp()
+  
+  // Carregar posições do Supabase ao montar
+  useEffect(() => {
+    if (!user) return
+    getCriptoPositionsDB(user.id).then(saved => {
+      if (saved && saved.length) setPositions(saved)
+    })
+  }, [user?.id])
+
   const save = (newPos) => {
     setPositions(newPos)
-    saveCriptoPositions(newPos)
+    if (user) saveCriptoPositionsDB(user.id, newPos)
   }
 
   const updateField = (symbol, field, value) => {
@@ -463,7 +498,7 @@ export function CriptoTab() {
 
   const selectedPos = positions.find(p => p.symbol === selectedSymbol)
   const selectedPrice = prices[selectedSymbol]?.price
-  const selectedSig = calcSignals(selectedPos, selectedPrice)
+  const selectedSig = calcSignals(selectedPos, selectedPrice, selectedHistory)
   const selectedHistory = histories[`${selectedSymbol}-${period}`]
   const sc = SIGNAL_CONFIG[selectedSig?.signal || 'hold']
 
@@ -497,7 +532,8 @@ export function CriptoTab() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px,1fr))', gap: 10 }}>
         {positions.map(pos => {
           const pr = prices[pos.symbol]
-          const sig = calcSignals(pos, pr?.price)
+          const hist = histories[`${pos.symbol}-90`]
+          const sig = calcSignals(pos, pr?.price, hist)
           const sconf = SIGNAL_CONFIG[sig?.signal || 'hold']
           const isSelected = selectedSymbol === pos.symbol
           return (
@@ -580,11 +616,23 @@ export function CriptoTab() {
             )}
 
             {/* Razões do sinal */}
-            {selectedSig?.signalReasons.length > 0 && (
-              <div style={{ background: sc.bg, borderRadius: 10, padding: '10px 14px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: sc.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 6 }}>Análise do sinal</div>
+            {selectedSig && (
+              <div style={{ background: sc.bg, borderRadius: 10, padding: '12px 14px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: sc.color, textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: 8 }}>
+                  Análise · Score: {selectedSig.signalScore >= 0 ? '+' : ''}{selectedSig.signalScore.toFixed(1)}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                  {selectedSig.rsi !== null && (
+                    <span style={{ fontSize: 11, padding: '3px 9px', borderRadius: 99, fontWeight: 700, background: selectedSig.rsi < 30 ? 'rgba(34,197,94,.25)' : selectedSig.rsi > 70 ? 'rgba(239,68,68,.25)' : 'var(--bg3)', color: selectedSig.rsi < 30 ? 'var(--gr)' : selectedSig.rsi > 70 ? 'var(--rd)' : 'var(--tx2)' }}>
+                      RSI {selectedSig.rsi}
+                    </span>
+                  )}
+                  {selectedSig.ma20 && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: 'var(--bg3)', color: 'var(--tx3)' }}>MM20 {fmt.brl(selectedSig.ma20)}</span>}
+                  {selectedSig.ma50 && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: 'var(--bg3)', color: 'var(--tx3)' }}>MM50 {fmt.brl(selectedSig.ma50)}</span>}
+                  {selectedSig.ma200 && <span style={{ fontSize: 10, padding: '3px 8px', borderRadius: 99, background: 'var(--bg3)', color: 'var(--tx3)' }}>MM200 {fmt.brl(selectedSig.ma200)}</span>}
+                </div>
                 {selectedSig.signalReasons.map((r, i) => (
-                  <div key={i} style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 3 }}>· {r}</div>
+                  <div key={i} style={{ fontSize: 12, color: 'var(--tx2)', marginBottom: 5, paddingBottom: 5, borderBottom: i < selectedSig.signalReasons.length - 1 ? '1px solid rgba(255,255,255,.06)' : 'none', lineHeight: 1.45 }}>{r}</div>
                 ))}
               </div>
             )}

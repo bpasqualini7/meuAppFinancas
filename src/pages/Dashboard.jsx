@@ -140,12 +140,15 @@ export default function Dashboard() {
             <MiniDonut data={donut} />
             <div style={{ flex: 1 }}>
               {donut.map(d => (
-                <div key={d.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 7 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <div style={{ width: 7, height: 7, borderRadius: 2, background: d.color }} />
-                    <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{d.label}</span>
+                <div key={d.label} style={{ marginBottom: 8 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <div style={{ width: 7, height: 7, borderRadius: 2, background: d.color }} />
+                      <span style={{ fontSize: 12, color: 'var(--tx2)' }}>{d.label}</span>
+                    </div>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{totalP ? ((d.value / totalP) * 100).toFixed(1) : '0'}%</span>
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>{totalP ? ((d.value / totalP) * 100).toFixed(1) : '0'}%</span>
+                  <div style={{ fontSize: 11, color: 'var(--tx3)', marginLeft: 13 }}>{fmt.brl(d.value)}</div>
                 </div>
               ))}
             </div>
@@ -153,19 +156,29 @@ export default function Dashboard() {
         </Card>
         <Card>
           <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 4 }}>Balanceamento por Idade</div>
-          <p style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 14 }}>Para {age} anos: RF {rfT.toFixed(0)}% / FII {fiiT.toFixed(0)}% / RV {rvT.toFixed(0)}%</p>
-          <BalBar label="Renda Fixa" current={rfP} target={rfT} color="var(--ac2)" />
-          <BalBar label="FIIs" current={fiiP} target={fiiT} color="var(--am)" />
-          <BalBar label="Ações" current={rvP} target={rvT} color="var(--gr)" />
-          {(Math.abs(rfP - rfT) > 5 || Math.abs(fiiP - fiiT) > 5 || Math.abs(rvP - rvT) > 5) && (
-            <div style={{ marginTop: 10, padding: '7px 10px', borderRadius: 8, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', fontSize: 11, color: 'var(--am)' }}>
-              ⚠ {Math.abs(rfP - rfT) > Math.abs(fiiP - fiiT) && Math.abs(rfP - rfT) > Math.abs(rvP - rvT)
-                ? 'Reforce a Renda Fixa'
-                : Math.abs(fiiP - fiiT) > Math.abs(rvP - rvT)
-                ? 'Reforce os FIIs'
-                : 'Reforce as Ações'} para balancear a carteira
-            </div>
-          )}
+          <p style={{ fontSize: 11, color: 'var(--tx3)', marginBottom: 14 }}>
+            Meta p/ {age} anos (Config.): RF {rfT.toFixed(0)}% · FII {fiiT.toFixed(0)}% · Ações {rvT.toFixed(0)}%
+          </p>
+          <BalBar label={`Renda Fixa — ${fmt.brl(byClass.fixed_income||0)}`} current={rfP} target={rfT} color="var(--ac2)" />
+          <BalBar label={`FIIs — ${fmt.brl(byClass.fii||0)}`} current={fiiP} target={fiiT} color="var(--am)" />
+          <BalBar label={`Ações — ${fmt.brl((byClass.stock_br||0)+(byClass.stock_us||0))}`} current={rvP} target={rvT} color="var(--gr)" />
+          {(() => {
+            const gaps = [
+              { label: 'Renda Fixa', diff: rfP - rfT },
+              { label: 'FIIs', diff: fiiP - fiiT },
+              { label: 'Ações', diff: rvP - rvT },
+            ]
+            const worst = gaps.reduce((a, b) => Math.abs(b.diff) > Math.abs(a.diff) ? b : a)
+            if (Math.abs(worst.diff) <= 5) return null
+            const msg = worst.diff < 0
+              ? `⚠ ${worst.label} está ${Math.abs(worst.diff).toFixed(0)}pp abaixo da meta — priorize aqui`
+              : `⚠ ${worst.label} está ${worst.diff.toFixed(0)}pp acima da meta — redirecione aportes`
+            return (
+              <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.3)', fontSize: 11, color: 'var(--am)', lineHeight: 1.5 }}>
+                {msg}
+              </div>
+            )
+          })()}
         </Card>
       </div>
     ),

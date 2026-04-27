@@ -1062,6 +1062,22 @@ export function Proventos() {
   )
 }
 
+
+const GUIDE = [
+  { title: 'PM — Preço Médio', content: 'Média simples do preço pago em todas as compras de um ativo. Calculado como: soma total investido ÷ quantidade total de cotas compradas. Não considera dividendos recebidos.' },
+  { title: 'PMP — Preço Médio Ponderado (do bolso)', content: 'Similar ao PM, mas desconta os dividendos já recebidos do custo total. Representa quanto de fato saiu do seu bolso por cota, considerando os proventos como "reembolso" parcial. PMP = (Custo total − dividendos acumulados) ÷ quantidade.' },
+  { title: 'DY — Dividend Yield', content: 'Porcentagem de retorno em dividendos dos últimos 12 meses em relação ao preço atual. DY = (dividendos/cota nos últimos 12m ÷ preço atual) × 100. FIIs costumam ter DY entre 8% e 14% ao ano.' },
+  { title: 'P/L — Preço sobre Lucro', content: 'Quantos anos de lucro atual são necessários para pagar o preço da ação. P/L baixo (< 12x) pode indicar ação barata. Não se aplica a FIIs — use P/VP para eles.' },
+  { title: 'P/VP — Preço sobre Valor Patrimonial', content: 'Para FIIs: compara o preço de mercado com o valor patrimonial por cota. P/VP < 1 significa que você está comprando o ativo abaixo do valor dos imóveis que ele possui. Ideal: entre 0.90 e 1.10.' },
+  { title: 'Nº Mágico', content: 'Quantidade de cotas necessária para receber R$1.000/mês em dividendos com aquele ativo, com base na média dos últimos proventos. Serve como referência de meta de acumulação para independência financeira.' },
+  { title: 'C20A — Carteira 20 Ativos', content: 'Metodologia de construir uma carteira sólida com até 20 ativos bem selecionados. Cada ativo tem uma meta de alocação mínima e máxima em reais. O objetivo é aportar no ativo mais distante da meta inferior.' },
+  { title: 'Saldo de Proventos', content: 'Valor acumulado de dividendos recebidos ainda não reinvestidos. Quando você usa proventos para comprar mais cotas, o saldo diminui e o PMP do ativo cai, refletindo o custo real do bolso.' },
+  { title: 'Balanceamento por Idade', content: 'Regra geral de alocação baseada na sua idade (configurável em Config.): RF% = sua idade, FII% = (100 - idade) ÷ 2, RV% = (100 - idade) ÷ 2. Exemplo: 40 anos → RF 40%, FII 30%, RV 30%. É uma diretriz, não uma regra rígida.' },
+  { title: 'RSI — Índice de Força Relativa', content: 'Indicador técnico de 0 a 100. RSI < 30 indica ativo sobrevendido (possível compra), RSI > 70 indica sobrecomprado (possível venda). Calculado com base nos últimos 14 períodos de variação de preço.' },
+  { title: 'Médias Móveis (MM)', content: 'Média do preço dos últimos N dias. MM20 = média de 20 dias, MM50 = 50 dias, MM200 = 200 dias. Preço acima da MM200 = tendência de alta no longo prazo. Cruzamento da MM20 acima da MM50 = sinal de compra (Golden Cross).' },
+  { title: 'Buy and Hold', content: 'Estratégia de longo prazo: comprar bons ativos e manter independente das oscilações do mercado. O foco é acumular cotas e reinvestir dividendos. A maioria dos retornos vem do tempo no mercado, não do timing.' },
+]
+
 export function Guia() {
   const [open, setOpen] = useState(null)
   return (

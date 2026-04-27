@@ -356,3 +356,19 @@ export const getCriptoPositions = () => {
 export const saveCriptoPositions = (positions) => {
   localStorage.setItem(CRIPTO_KEY, JSON.stringify(positions))
 }
+
+// ── Cripto positions — persistidas no Supabase via profiles ──
+export const getCriptoPositionsDB = async (userId) => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('cripto_positions')
+    .eq('user_id', userId)
+    .single()
+  return data?.cripto_positions || null
+}
+
+export const saveCriptoPositionsDB = async (userId, positions) => {
+  await supabase
+    .from('profiles')
+    .upsert({ user_id: userId, cripto_positions: positions }, { onConflict: 'user_id' })
+}
