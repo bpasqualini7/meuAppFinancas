@@ -443,12 +443,14 @@ function MiniChart({ history, signal, refBuy, refSell }) {
 }
 
 export function CriptoTab() {
+  // Hooks always at the top — never after other hooks
+  const { user } = useApp()
   const [positions, setPositions] = useState(DEFAULT_POSITIONS)
   const [prices, setPrices] = useState({})
   const [histories, setHistories] = useState({})
   const [loadingPrices, setLoadingPrices] = useState(true)
   const [editMode, setEditMode] = useState(false)
-  const [editPos, setEditPos] = useState(null) // symbol em edição
+  const [editPos, setEditPos] = useState(null)
   const [aporte, setAporte] = useState('')
   const [selectedSymbol, setSelectedSymbol] = useState('BTC')
   const [period, setPeriod] = useState(90)
@@ -477,8 +479,6 @@ export function CriptoTab() {
     })
   }, [selectedSymbol, period])
 
-  const { user } = useApp()
-  
   // Carregar posições do Supabase ao montar
   useEffect(() => {
     if (!user) return
@@ -489,7 +489,7 @@ export function CriptoTab() {
 
   const save = (newPos) => {
     setPositions(newPos)
-    if (user) saveCriptoPositionsDB(user.id, newPos)
+    if (user) saveCriptoPositionsDB(user.id, newPos).catch(() => console.warn('Erro ao salvar cripto positions'))
   }
 
   const updateField = (symbol, field, value) => {

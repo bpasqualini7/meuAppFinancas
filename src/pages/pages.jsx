@@ -279,13 +279,36 @@ export function Portfolio() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
       {/* Dashboard resumo */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 10 }}>
+      {/* KPIs gerais */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10 }}>
         <KPI label="Patrimônio Total" value={fmt.brl(totalPatrimonio)} sub={`${portfolio.length} ativos`} color="var(--ac)" />
         <KPI label="Custo Total" value={fmt.brl(totalCusto)} sub="Investido" />
         <KPI label="Resultado" value={fmt.brl(totalResult)} sub={fmt.pct(totalResultPct)} color={totalResult >= 0 ? 'var(--gr)' : 'var(--rd)'} />
         <KPI label="Dividendos Acum." value={fmt.brl(totalDivs)} sub="Histórico total" color="var(--ac2)" />
         <KPI label="Saldo Proventos" value={fmt.brl(totalSaldo)} sub="Disponível" color="var(--am)" />
       </div>
+      {/* KPIs por classe */}
+      {(() => {
+        const byClass = {}
+        portfolio.forEach(a => {
+          const v = (prices[a.ticker]?.price || a.avg_price) * a.quantity
+          byClass[a.asset_class] = (byClass[a.asset_class] || 0) + v
+        })
+        const classColors = { fii: 'var(--am)', stock_br: 'var(--gr)', stock_us: '#60a5fa', crypto: 'var(--ac)', fixed_income: 'var(--ac2)', other: 'var(--tx3)' }
+        return Object.entries(byClass).length > 0 ? (
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {Object.entries(byClass).sort((a,b) => b[1]-a[1]).map(([cls, val]) => (
+              <div key={cls} onClick={() => { setFilterClass(cls); setFilterSector('all') }}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 99, background: 'var(--bg3)', border: `1px solid ${filterClass===cls ? classColors[cls]||'var(--ac)' : 'var(--bd)'}`, cursor: 'pointer' }}>
+                <div style={{ width: 8, height: 8, borderRadius: 2, background: classColors[cls] || 'var(--tx3)', flexShrink: 0 }} />
+                <span style={{ fontSize: 11, color: 'var(--tx2)' }}>{CLASS_LABEL[cls] || cls}</span>
+                <span style={{ fontSize: 12, fontWeight: 800, color: classColors[cls] || 'var(--tx)' }}>{fmt.brl(val)}</span>
+                <span style={{ fontSize: 10, color: 'var(--tx3)' }}>{totalPatrimonio > 0 ? ((val/totalPatrimonio)*100).toFixed(0) : 0}%</span>
+              </div>
+            ))}
+          </div>
+        ) : null
+      })()}
 
       {/* Filtros e controles */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
