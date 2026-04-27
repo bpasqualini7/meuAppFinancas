@@ -372,3 +372,19 @@ export const saveCriptoPositionsDB = async (userId, positions) => {
     .from('profiles')
     .upsert({ user_id: userId, cripto_positions: positions }, { onConflict: 'user_id' })
 }
+
+// ── Dashboard order — persistido no Supabase ──────────────
+export const getDashboardOrder = async (userId) => {
+  const { data } = await supabase
+    .from('profiles')
+    .select('dashboard_order')
+    .eq('user_id', userId)
+    .single()
+  return data?.dashboard_order || null
+}
+
+export const saveDashboardOrder = async (userId, order) => {
+  await supabase
+    .from('profiles')
+    .upsert({ user_id: userId, dashboard_order: order }, { onConflict: 'user_id' })
+}

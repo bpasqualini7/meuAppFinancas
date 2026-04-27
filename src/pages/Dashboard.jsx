@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR } from '../lib/context'
 import { KPI, Card, MiniDonut, BalBar, AttrBadge, Spinner } from '../components/ui'
 
@@ -84,13 +84,21 @@ function DraggableSection({ id, index, onDragStart, onDragOver, onDrop, children
 const DEFAULT_ORDER = ['kpis', 'allocation', 'positions']
 
 export default function Dashboard() {
-  const { portfolio, prices, macro, profile, loading } = useApp()
+  const { portfolio, prices, macro, profile, loading, user } = useApp()
   const [editMode, setEditMode] = useState(false)
   const [order, setOrder] = useState(() => {
+    // Inicializa com localStorage para evitar flash, depois sincroniza com Supabase
     try { return JSON.parse(localStorage.getItem('dashboard_order')) || DEFAULT_ORDER }
     catch { return DEFAULT_ORDER }
   })
   const dragFrom = useRef(null)
+  // Carregar ordem do Supabase ao montar (sobrescreve localStorage se tiver versão mais recente)
+  useEffect(() => {
+    if (!user) return
+    getDashboardOrder(user.id)
+      .then(saved => { if (saved && Array.isArray(saved) && saved.length) setOrder(saved) })
+      .catch(() => {}) // coluna pode não existir ainda
+  }, [user?.id])
 
   if (loading) return <Spinner />
 
@@ -119,7 +127,9 @@ export default function Dashboard() {
     const [moved] = newOrder.splice(dragFrom.current, 1)
     newOrder.splice(i, 0, moved)
     setOrder(newOrder)
+    // Persistir em ambos — localStorage (imediato) e Supabase (multi-browser)
     localStorage.setItem('dashboard_order', JSON.stringify(newOrder))
+    if (user) saveDashboardOrder(user.id, newOrder).catch(() => {})
     dragFrom.current = null
   }
 
