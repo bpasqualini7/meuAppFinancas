@@ -81,7 +81,7 @@ function DraggableSection({ id, index, onDragStart, onDragOver, onDrop, children
 }
 
 // ── Seções do Dashboard ───────────────────────────────────
-const DEFAULT_ORDER = ['kpis', 'allocation', 'positions']
+const DEFAULT_ORDER = ['kpis', 'allocation', 'sector', 'dividends_ranking', 'positions']
 
 export default function Dashboard() {
   const { portfolio, prices, macro, profile, loading, user } = useApp()
@@ -92,12 +92,18 @@ export default function Dashboard() {
     catch { return DEFAULT_ORDER }
   })
   const dragFrom = useRef(null)
+  const [divHistory, setDivHistory] = useState([])
   // Carregar ordem do Supabase ao montar (sobrescreve localStorage se tiver versão mais recente)
   useEffect(() => {
     if (!user) return
     getDashboardOrder(user.id)
       .then(saved => { if (saved && Array.isArray(saved) && saved.length) setOrder(saved) })
-      .catch(() => {}) // coluna pode não existir ainda
+      .catch(() => {})
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!user) return
+    getDividends(user.id).then(d => setDivHistory(d || [])).catch(() => {})
   }, [user?.id])
 
   if (loading) return <Spinner />
@@ -118,6 +124,36 @@ export default function Dashboard() {
   const rvP = totalP ? (((byClass.stock_br || 0) + (byClass.stock_us || 0) + (byClass.crypto || 0)) / totalP) * 100 : 0
   // Ações = stock_br + stock_us + crypto (sem FII — FII tem linha própria)
   const monthly = portfolio.reduce((s, a) => s + (a.estimated_monthly_dividend_per_share || 0) * a.quantity, 0)
+
+  // ── Por setor ─────────────────────────────────────────────
+  const bySector = {}
+  portfolio.forEach(a => {
+    if (!a.sector) return
+    const v = (prices[a.ticker]?.price || a.avg_price) * a.quantity
+    bySector[a.sector] = (bySector[a.sector] || 0) + v
+  })
+  const sectorEntries = Object.entries(bySector).sort((a, b) => b[1] - a[1])
+  const sectorMax = sectorEntries[0]?.[1] || 1
+
+  // ── Ranking proventos ─────────────────────────────────────
+  const divByTicker = {}
+  divHistory.forEach(d => {
+    const ticker = d.assets?.ticker
+    if (!ticker) return
+    divByTicker[ticker] = (divByTicker[ticker] || 0) + (d.total_amount || 0)
+  })
+  const topDivs = Object.entries(divByTicker).sort((a, b) => b[1] - a[1]).slice(0, 8)
+
+  // ── Últimos proventos recebidos ───────────────────────────
+  const recentDivs = [...divHistory]
+    .sort((a, b) => b.payment_date?.localeCompare(a.payment_date))
+    .slice(0, 6)
+
+  // ── DY médio estimado da carteira ────────────────────────
+  const assetsWithDY = portfolio.filter(a => prices[a.ticker]?.dy)
+  const avgDY = assetsWithDY.length
+    ? assetsWithDY.reduce((s, a) => s + Number(prices[a.ticker].dy), 0) / assetsWithDY.length
+    : null
 
   const handleDragStart = (i) => { dragFrom.current = i }
   const handleDragOver = (i) => { }
@@ -192,6 +228,85 @@ export default function Dashboard() {
         </Card>
       </div>
     ),
+    sector: sectorEntries.length > 0 ? (
+      <Card>
+        <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Alocação por Setor</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {sectorEntries.map(([sector, val]) => (
+            <div key={sector}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                <span style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 500 }}>{sector}</span>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{totalP > 0 ? ((val/totalP)*100).toFixed(1) : 0}%</span>
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt.brl(val)}</span>
+                </div>
+              </div>
+              <div style={{ height: 6, borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
+                <div style={{ height: '100%', width: `${(val/sectorMax)*100}%`, borderRadius: 3, background: 'var(--ac)', transition: 'width .4s' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+    ) : null,
+
+    dividends_ranking: (
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 14 }}>
+        {/* Ranking proventos */}
+        {topDivs.length > 0 && (
+          <Card>
+            <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>
+              Top Proventos Recebidos
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+              {topDivs.map(([ticker, total], i) => {
+                const maxDiv = topDivs[0][1]
+                return (
+                  <div key={ticker}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span style={{ fontSize: 10, color: 'var(--tx3)', minWidth: 14, fontWeight: 700 }}>{i+1}</span>
+                        <span style={{ fontSize: 12, fontWeight: 800 }}>{ticker}</span>
+                      </div>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--ac2)' }}>{fmt.brl(total)}</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 2, background: 'var(--bg3)', overflow: 'hidden', marginLeft: 21 }}>
+                      <div style={{ height: '100%', width: `${(total/maxDiv)*100}%`, borderRadius: 2, background: 'rgba(168,85,247,.6)' }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </Card>
+        )}
+
+        {/* Últimos recebidos + DY médio */}
+        <Card>
+          <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 6 }}>
+            Últimos Proventos
+          </div>
+          {avgDY != null && (
+            <div style={{ fontSize: 12, color: 'var(--tx3)', marginBottom: 12 }}>
+              DY médio carteira: <span style={{ fontWeight: 800, color: avgDY > 8 ? 'var(--gr)' : 'var(--am)' }}>{avgDY.toFixed(1)}%</span>
+            </div>
+          )}
+          {recentDivs.map((d, i) => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: i < recentDivs.length - 1 ? '1px solid var(--bd)' : 'none' }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 12 }}>{d.assets?.ticker}</div>
+                <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{fmt.date(d.payment_date)}</div>
+              </div>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontWeight: 800, color: 'var(--ac2)', fontSize: 13 }}>{fmt.brl(d.total_amount)}</div>
+                <div style={{ fontSize: 10, color: 'var(--tx3)' }}>{fmt.brl(d.amount_per_share)}/cota</div>
+              </div>
+            </div>
+          ))}
+          {recentDivs.length === 0 && <div style={{ color: 'var(--tx3)', fontSize: 12 }}>Nenhum provento registrado.</div>}
+        </Card>
+      </div>
+    ),
+
     positions: portfolio.length > 0 ? (
       <Card>
         <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Posições em Destaque</div>
