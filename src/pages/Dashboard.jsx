@@ -97,7 +97,14 @@ export default function Dashboard() {
   useEffect(() => {
     if (!user) return
     getDashboardOrder(user.id)
-      .then(saved => { if (saved && Array.isArray(saved) && saved.length) setOrder(saved) })
+      .then(saved => {
+        if (saved && Array.isArray(saved) && saved.length) {
+          // Migrar: adicionar novas seções se não existirem no order salvo
+          const allSections = ['kpis', 'allocation', 'sector', 'dividends_ranking', 'positions']
+          const merged = [...saved, ...allSections.filter(s => !saved.includes(s))]
+          setOrder(merged)
+        }
+      })
       .catch(() => {})
   }, [user?.id])
 
@@ -137,20 +144,21 @@ export default function Dashboard() {
 
   // ── Ranking proventos ─────────────────────────────────────
   const divByTicker = {}
-  divHistory.forEach(d => {
+  ;(divHistory || []).forEach(d => {
     const ticker = d.assets?.ticker
-    if (!ticker) return
+    if (!ticker || !d.total_amount) return
     divByTicker[ticker] = (divByTicker[ticker] || 0) + (d.total_amount || 0)
   })
   const topDivs = Object.entries(divByTicker).sort((a, b) => b[1] - a[1]).slice(0, 8)
 
   // ── Últimos proventos recebidos ───────────────────────────
   const recentDivs = [...divHistory]
-    .sort((a, b) => b.payment_date?.localeCompare(a.payment_date))
+    .filter(d => d.payment_date)
+    .sort((a, b) => b.payment_date.localeCompare(a.payment_date))
     .slice(0, 6)
 
   // ── DY médio estimado da carteira ────────────────────────
-  const assetsWithDY = portfolio.filter(a => prices[a.ticker]?.dy)
+  const assetsWithDY = portfolio.filter(a => prices[a.ticker]?.dy != null && Number(prices[a.ticker].dy) > 0)
   const avgDY = assetsWithDY.length
     ? assetsWithDY.reduce((s, a) => s + Number(prices[a.ticker].dy), 0) / assetsWithDY.length
     : null
