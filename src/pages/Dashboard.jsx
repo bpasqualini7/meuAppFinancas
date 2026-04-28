@@ -100,13 +100,14 @@ export default function Dashboard() {
     getDashboardOrder(user.id)
       .then(saved => {
         if (saved && Array.isArray(saved) && saved.length) {
-          // Migrar: adicionar novas seções se não existirem no order salvo
           const allSections = ['kpis', 'allocation', 'sector', 'dividends_ranking', 'positions']
           const merged = [...saved, ...allSections.filter(s => !saved.includes(s))]
           setOrder(merged)
         }
       })
-      .catch(() => {})
+      .catch(() => {
+        // Coluna dashboard_order não existe ainda — rode add_dashboard_order_column.sql
+      })
   }, [user?.id])
 
   useEffect(() => {
@@ -240,21 +241,59 @@ export default function Dashboard() {
     sector: sectorEntries.length > 0 ? (
       <Card>
         <div style={{ fontSize: 11, color: 'var(--tx3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 700, marginBottom: 14 }}>Alocação por Setor</div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {sectorEntries.map(([sector, val]) => (
-            <div key={sector}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-                <span style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 500 }}>{sector}</span>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                  <span style={{ fontSize: 11, color: 'var(--tx3)' }}>{totalP > 0 ? ((val/totalP)*100).toFixed(1) : 0}%</span>
-                  <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt.brl(val)}</span>
+        {/* Legenda */}
+        <div style={{ display: 'flex', gap: 12, marginBottom: 14 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--am)' }} />
+            <span style={{ color: 'var(--tx3)' }}>FII</span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11 }}>
+            <div style={{ width: 10, height: 10, borderRadius: 2, background: 'var(--gr)' }} />
+            <span style={{ color: 'var(--tx3)' }}>Ação BR</span>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {sectorEntries.map(([sector, val]) => {
+            // Calcular split FII vs Ação neste setor
+            let fiiVal = 0, stockVal = 0
+            portfolio.forEach(a => {
+              if (a.sector !== sector) return
+              const v = (prices[a.ticker]?.price || a.avg_price) * a.quantity
+              if (a.asset_class === 'fii') fiiVal += v
+              else stockVal += v
+            })
+            const total = fiiVal + stockVal
+            const fiiPct = total > 0 ? (fiiVal / total) * 100 : 0
+            const stockPct = total > 0 ? (stockVal / total) * 100 : 0
+            return (
+              <div key={sector}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                  <span style={{ fontSize: 12, color: 'var(--tx2)', fontWeight: 500 }}>{sector}</span>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <span style={{ fontSize: 10, color: 'var(--tx3)' }}>{totalP > 0 ? ((val/totalP)*100).toFixed(1) : 0}%</span>
+                    <span style={{ fontSize: 12, fontWeight: 700 }}>{fmt.brl(val)}</span>
+                  </div>
                 </div>
+                {/* Barra dupla FII + Ação */}
+                <div style={{ height: 8, borderRadius: 4, background: 'var(--bg3)', overflow: 'hidden', display: 'flex' }}>
+                  {fiiVal > 0 && (
+                    <div style={{ height: '100%', width: `${(fiiVal/sectorMax)*100}%`, background: 'var(--am)', transition: 'width .4s', borderRadius: stockVal > 0 ? '4px 0 0 4px' : 4 }} />
+                  )}
+                  {stockVal > 0 && (
+                    <div style={{ height: '100%', width: `${(stockVal/sectorMax)*100}%`, background: 'var(--gr)', transition: 'width .4s', borderRadius: fiiVal > 0 ? '0 4px 4px 0' : 4 }} />
+                  )}
+                </div>
+                {/* Labels split */}
+                {fiiVal > 0 && stockVal > 0 && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 3 }}>
+                    <span style={{ fontSize: 10, color: 'var(--am)' }}>FII {fmt.brl(fiiVal)}</span>
+                    <span style={{ fontSize: 10, color: 'var(--tx3)' }}>·</span>
+                    <span style={{ fontSize: 10, color: 'var(--gr)' }}>Ação {fmt.brl(stockVal)}</span>
+                  </div>
+                )}
               </div>
-              <div style={{ height: 6, borderRadius: 3, background: 'var(--bg3)', overflow: 'hidden' }}>
-                <div style={{ height: '100%', width: `${(val/sectorMax)*100}%`, borderRadius: 3, background: 'var(--ac)', transition: 'width .4s' }} />
-              </div>
-            </div>
-          ))}
+            )
+          })}
         </div>
       </Card>
     ) : null,
