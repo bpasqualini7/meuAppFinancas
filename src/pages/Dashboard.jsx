@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useApp, fmt, CLASS_LABEL, CLASS_COLOR } from '../lib/context'
 import { KPI, Card, MiniDonut, BalBar, AttrBadge, Spinner } from '../components/ui'
+import { getDashboardOrder, saveDashboardOrder, getDividends } from '../lib/supabase'
 
 // ── Macro Ticker Strip ────────────────────────────────────
 function MacroStrip({ macro }) {

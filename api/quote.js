@@ -110,24 +110,29 @@ export default async function handler(req, res) {
       }
     }
 
-    // Fallback: brapi
-    const brapiRes = await fetch(
-      `https://brapi.dev/api/quote/${ticker}?fundamental=true&range=1d&interval=1d&token=${BRAPI_TOKEN}`
-    )
-    const brapiData = await brapiRes.json()
-    const bq = brapiData.results?.[0]
-    if (bq) {
-      return res.status(200).json({
-        price: bq.regularMarketPrice,
-        change_pct: bq.regularMarketChangePercent,
-        pl: bq.priceEarnings,
-        pvp: bq.priceToBook,
-        dy: bq.dividendYield,
-        ma200: bq.twoHundredDayAverage,
-        high52: bq.fiftyTwoWeekHigh,
-        low52: bq.fiftyTwoWeekLow,
-        source: 'brapi',
-      })
+    // Fallback: brapi (tenta ticker original e sem F final)
+    const tickersToTry = [ticker, ticker.replace(/F$/, '')].filter((v, i, a) => a.indexOf(v) === i)
+    for (const t of tickersToTry) {
+      const brapiRes = await fetch(
+        `https://brapi.dev/api/quote/${t}?fundamental=true&range=1d&interval=1d&token=${BRAPI_TOKEN}`
+      )
+      if (brapiRes.ok) {
+        const brapiData = await brapiRes.json()
+        const bq = brapiData.results?.[0]
+        if (bq?.regularMarketPrice) {
+          return res.status(200).json({
+            price: bq.regularMarketPrice,
+            change_pct: bq.regularMarketChangePercent,
+            pl: bq.priceEarnings,
+            pvp: bq.priceToBook,
+            dy: bq.dividendYield,
+            ma200: bq.twoHundredDayAverage,
+            high52: bq.fiftyTwoWeekHigh,
+            low52: bq.fiftyTwoWeekLow,
+            source: 'brapi',
+          })
+        }
+      }
     }
 
     return res.status(404).json({ error: 'No data found' })
