@@ -30,6 +30,7 @@ export const getPortfolio = async (userId) => {
     .from('portfolio_summary')
     .select('*')
     .eq('user_id', userId)
+    .gt('quantity', 0)        // só ativos com posição positiva
     .order('asset_class')
   if (error) throw error
   return data
