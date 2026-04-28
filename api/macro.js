@@ -16,9 +16,9 @@ export default async function handler(req, res) {
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.1/dados/ultimos/1?formato=json').then(r => r.json()),
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.432/dados/ultimos/2?formato=json').then(r => r.json()),
       fetch('https://api.bcb.gov.br/dados/serie/bcdata.sgs.12/dados/ultimos/1?formato=json').then(r => r.json()),
-      // IBOV e SP500 via BolsaI (sem CORS de servidor)
-      fetch(`${BASE}/stocks/BOVA11/quote`, { headers }).then(r => r.json()),
-      fetch(`${BASE}/stocks/IVVB11/quote`, { headers }).then(r => r.json()),
+      // IBOV via Yahoo Finance (^BVSP) e S&P500 (^GSPC)
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/BOVA11.SA?interval=1d&range=2d', { headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.json()).catch(() => null),
+      fetch('https://query1.finance.yahoo.com/v8/finance/chart/IVVB11.SA?interval=1d&range=2d', { headers: { 'User-Agent': 'Mozilla/5.0' } }).then(r => r.json()).catch(() => null),
       fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl,usd&include_24hr_change=true').then(r => r.json()),
     ])
 
