@@ -28,7 +28,7 @@ export function AppProvider({ children }) {
         fetchMacro(),
       ])
       if (prof.status === 'fulfilled') setProfile(prof.value)
-      const portData = port.status === 'fulfilled' ? (port.value || []).filter(a => (a.quantity || 0) > 0) : []
+      const portData = port.status === 'fulfilled' ? (port.value || []).filter(a => (a.quantity || 0) > 0.00001) : []
       setPortfolio(portData)
       if (divs.status === 'fulfilled') setDividends(divs.value)
       if (divBal.status === 'fulfilled') setDivBalances(divBal.value)

@@ -109,7 +109,7 @@ function AssetDetailModal({ asset, prices, user, onClose }) {
           {/* KPIs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(115px, 1fr))', gap: 7 }}>
             {[
-              ['Qtd. atual', fmt.num(asset.quantity, 0) + ' cotas', 'var(--tx)'],
+              ['Qtd. atual', (asset.quantity < 1 ? asset.quantity.toFixed(6) : fmt.num(asset.quantity, 0)) + (asset.quantity < 1 ? '' : ' cotas'), 'var(--tx)'],
               ['Cotação', fmt.brl(price), 'var(--tx)'],
               ['Patrimônio', fmt.brl(price * asset.quantity), 'var(--ac)'],
               ['PM', fmt.brl(asset.avg_price), 'var(--tx2)'],
@@ -372,7 +372,7 @@ export function Portfolio() {
                   {[
                     ['Patrimônio', fmt.brl(price * a.quantity), 'var(--tx)'],
                     ['Resultado', fmt.brl(res), res >= 0 ? 'var(--gr)' : 'var(--rd)'],
-                    ['Qtd.', fmt.num(a.quantity, 0), 'var(--tx2)'],
+                    ['Qtd.', a.quantity < 1 ? a.quantity.toFixed(4) : fmt.num(a.quantity, 0), 'var(--tx2)'],
                     ['PMP', fmt.brl(a.avg_price_net || a.avg_price), 'var(--ac)'],
                   ].map(([l, v, c]) => (
                     <div key={l} style={{ background: 'var(--bg3)', borderRadius: 7, padding: '6px 9px' }}>
@@ -437,7 +437,7 @@ export function Portfolio() {
                           </span>
                         ) : <span style={{ color: 'var(--tx3)' }}>—</span>}
                       </td>
-                      <td style={{ padding: '9px 11px', fontWeight: 700 }}>{fmt.num(a.quantity, 0)}</td>
+                      <td style={{ padding: '9px 11px', fontWeight: 700 }}>{a.quantity < 1 ? a.quantity.toFixed(4) : fmt.num(a.quantity, 0)}</td>
                       <td style={{ padding: '9px 11px', color: 'var(--tx2)' }}>{fmt.brl(a.avg_price)}</td>
                       <td style={{ padding: '9px 11px' }}>
                         <div style={{ fontWeight: 700, color: pmpColor }}>{fmt.brl(pmpVal)}</div>
